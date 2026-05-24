@@ -172,7 +172,37 @@ def project_files(pid, filename):
     return send_from_directory(folder, filename)
 
 
+@app.route("/robots.txt")
+def robots_txt():
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        f"Sitemap: {request.url_root.rstrip('/')}/sitemap.xml",
+    ]
+    return "\n".join(lines), 200, {"Content-Type": "text/plain"}
+
+
+@app.route("/sitemap.xml")
+def sitemap():
+    db = get_db()
+    rows = db.execute("SELECT id FROM projects ORDER BY id DESC").fetchall()
+    urls = [url_for("index", _external=True)]
+    for row in rows:
+        urls.append(url_for("view_project", pid=row["id"], _external=True))
+    xml_lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ]
+    for u in urls:
+        xml_lines.append("  <url>")
+        xml_lines.append(f"    <loc>{u}</loc>")
+        xml_lines.append("  </url>")
+    xml_lines.append("</urlset>")
+    return "\n".join(xml_lines), 200, {"Content-Type": "application/xml"}
+
+
 if __name__ == "__main__":
     with app.app_context():
         init_db()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
