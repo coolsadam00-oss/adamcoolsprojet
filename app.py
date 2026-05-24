@@ -15,7 +15,14 @@ from flask import (
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.environ.get("RENDER_DATA_DIR", os.path.join(BASE_DIR, "data"))
+RENDER_DATA = os.environ.get("RENDER_DATA_DIR")
+if RENDER_DATA:
+    DATA_DIR = RENDER_DATA
+else:
+    import tempfile
+
+    DATA_DIR = os.path.join(tempfile.gettempdir(), "adamcoolsprojet_data")
+
 DB_PATH = os.path.join(DATA_DIR, "projects.db")
 PROJECTS_DIR = os.path.join(DATA_DIR, "projects")
 os.makedirs(PROJECTS_DIR, exist_ok=True)
