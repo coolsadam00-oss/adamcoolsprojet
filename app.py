@@ -15,8 +15,9 @@ from flask import (
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "projects.db")
-PROJECTS_DIR = os.path.join(BASE_DIR, "projects")
+DATA_DIR = os.environ.get("RENDER_DATA_DIR", os.path.join(BASE_DIR, "data"))
+DB_PATH = os.path.join(DATA_DIR, "projects.db")
+PROJECTS_DIR = os.path.join(DATA_DIR, "projects")
 os.makedirs(PROJECTS_DIR, exist_ok=True)
 
 app = Flask(__name__)
