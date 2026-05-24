@@ -56,6 +56,10 @@ def init_db():
     db.commit()
 
 
+with app.app_context():
+    init_db()
+
+
 @app.teardown_appcontext
 def close_db(exc):
     db = getattr(g, "db", None)
