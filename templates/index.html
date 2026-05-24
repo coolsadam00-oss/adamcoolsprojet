@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{ site_name }} — Games</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav class="topbar">
+    <div class="brand">{{ site_name }}</div>
+    <div class="search">
+      <form method="get" action="/">
+        <input name="q" placeholder="Search games, tags, description..." value="{{ q|e }}" />
+        <button type="submit">Search</button>
+      </form>
+    </div>
+    <div class="actions">
+      <a class="btn" href="/upload">Upload Game</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <h1>Discover and share games</h1>
+    <p>Upload HTML5 games, play in the browser, and search the gallery.</p>
+  </header>
+
+  <main>
+    {% if projects|length == 0 %}
+      <p class="empty">No projects yet. Click "Upload Game" to add your game (zip with index.html).</p>
+    {% endif %}
+
+    <div class="grid">
+      {% for p in projects %}
+      <div class="card">
+        <div class="card-head">
+          <h3>{{ p.title }}</h3>
+          <div class="tags">
+            {% for t in (p.tags or '').split(',') %}
+              {% if t.strip() %}<span class="tag">{{ t.strip() }}</span>{% endif %}
+            {% endfor %}
+          </div>
+        </div>
+        <p class="desc">{{ p.description }}</p>
+        <div class="card-actions">
+          <a class="view" href="/project/{{ p.id }}">Play / View</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </main>
+
+  <footer>
+    <div class="footer-inner">{{ site_name }} — simple game gallery • Upload responsibly</div>
+  </footer>
+</body>
+</html>
