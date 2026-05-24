@@ -20,6 +20,7 @@ from flask import (
     flash,
     session,
 )
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 try:
     from google.auth.transport import requests as google_requests
@@ -42,9 +43,11 @@ PROJECTS_DIR = os.path.join(DATA_DIR, "projects")
 os.makedirs(PROJECTS_DIR, exist_ok=True)
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-key-for-local-change-me")
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200MB uploads
 app.config["SITE_NAME"] = os.environ.get("SITE_NAME", "adamcoolsprojet.com")
+app.config["PREFERRED_URL_SCHEME"] = os.environ.get("PREFERRED_URL_SCHEME", "https")
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("COOKIE_SECURE", "0") == "1"
@@ -211,6 +214,12 @@ def admin_required(view):
     return wrapped
 
 
+def safe_next_url(value):
+    if value and value.startswith("/") and not value.startswith("//"):
+        return value
+    return url_for("index")
+
+
 def save_thumbnail(file, folder):
     if not file or not file.filename:
         return ""
@@ -299,6 +308,7 @@ def google_login():
         return redirect(url_for("login"))
     state = os.urandom(16).hex()
     session["oauth_state"] = state
+    session["oauth_next"] = safe_next_url(request.args.get("next"))
     params = {
         "client_id": client_id,
         "redirect_uri": url_for("google_callback", _external=True),
@@ -349,9 +359,10 @@ def google_callback():
         identity.get("name", ""),
         identity.get("picture", ""),
     )
+    next_url = safe_next_url(session.pop("oauth_next", None))
     session.clear()
     session["user_id"] = user["id"]
-    return redirect(request.args.get("next") or url_for("index"))
+    return redirect(next_url)
 
 
 @app.route("/logout", methods=["POST"])

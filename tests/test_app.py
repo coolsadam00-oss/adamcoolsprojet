@@ -4,6 +4,7 @@ import shutil
 import tempfile
 import unittest
 import zipfile
+from unittest import mock
 
 import app as site
 
@@ -79,6 +80,22 @@ class SiteAuthAdminTests(unittest.TestCase):
         response = self.client.get("/upload")
 
         self.assertEqual(response.status_code, 403)
+
+    def test_google_login_uses_https_callback_and_saves_next_url(self):
+        site.app.config["PREFERRED_URL_SCHEME"] = "https"
+        with mock.patch.dict(
+            os.environ,
+            {
+                "GOOGLE_CLIENT_ID": "client-id",
+                "GOOGLE_CLIENT_SECRET": "client-secret",
+            },
+        ):
+            response = self.client.get("/auth/google?next=/admin")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("redirect_uri=https%3A%2F%2Flocalhost%2Fauth%2Fgoogle%2Fcallback", response.headers["Location"])
+        with self.client.session_transaction() as session:
+            self.assertEqual(session["oauth_next"], "/admin")
 
     def test_admin_can_upload_game_with_thumbnail(self):
         self.login()
