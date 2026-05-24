@@ -40,11 +40,31 @@ class SiteAuthAdminTests(unittest.TestCase):
         payload.seek(0)
         return payload
 
-    def test_home_requires_login(self):
+    def test_home_allows_guest_browsing(self):
         response = self.client.get("/")
 
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/login", response.headers["Location"])
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Sign in", response.data)
+
+    def test_guest_can_view_project(self):
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Guest Game", "", "", "1", "now"),
+            )
+            db.commit()
+            project_id = cur.lastrowid
+            folder = os.path.join(site.PROJECTS_DIR, str(project_id))
+            os.makedirs(folder, exist_ok=True)
+            with open(os.path.join(folder, "index.html"), "w", encoding="utf-8") as f:
+                f.write("<h1>Guest Game</h1>")
+
+        response = self.client.get(f"/project/{project_id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Guest Game", response.data)
 
     def test_seed_admin_email_is_admin(self):
         with site.app.app_context():

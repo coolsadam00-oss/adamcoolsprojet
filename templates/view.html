@@ -14,7 +14,11 @@
     <div class="actions">
       <a class="btn" href="/">Back</a>
       {% if is_admin %}<a class="btn" href="/admin">Admin</a>{% endif %}
-      <form method="post" action="/logout" class="inline-form"><button type="submit">Sign out</button></form>
+      {% if current_user %}
+        <form method="post" action="/logout" class="inline-form"><button type="submit">Sign out</button></form>
+      {% else %}
+        <a class="btn secondary" href="/login">Sign in</a>
+      {% endif %}
       <button id="themeToggle" class="theme-toggle" type="button">Toggle Theme</button>
     </div>
   </nav>

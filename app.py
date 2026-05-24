@@ -268,7 +268,6 @@ def apply_lulu_command(prompt):
 
 
 @app.route("/")
-@login_required
 def index():
     q = request.args.get("q", "").strip()
     db = get_db()
@@ -420,7 +419,6 @@ def upload():
 
 
 @app.route("/project/<int:pid>")
-@login_required
 def view_project(pid):
     db = get_db()
     row = db.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
@@ -445,7 +443,6 @@ def view_project(pid):
 
 
 @app.route("/project_files/<int:pid>/<path:filename>")
-@login_required
 def project_files(pid, filename):
     folder = os.path.join(PROJECTS_DIR, str(pid))
     full = os.path.join(folder, filename)
