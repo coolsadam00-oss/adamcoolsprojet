@@ -184,6 +184,11 @@ def project_files(pid, filename):
     return send_from_directory(folder, filename)
 
 
+@app.route("/pong")
+def pong():
+    return render_template("pong.html")
+
+
 @app.route("/robots.txt")
 def robots_txt():
     lines = [

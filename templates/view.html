@@ -12,6 +12,7 @@
     <div class="brand">{{ site_name }}</div>
     <div class="actions">
       <a class="btn" href="/">Back</a>
+      <button id="themeToggle" class="theme-toggle" type="button">Toggle Theme</button>
     </div>
   </nav>
 
@@ -27,5 +28,6 @@
       <p>No index.html found in this project. You can browse files <a href="/project_files/{{ project.id }}/">here</a>.</p>
     {% endif %}
   </main>
+  <script src="/static/theme.js"></script>
 </body>
 </html>

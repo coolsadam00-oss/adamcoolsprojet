@@ -1,16 +1,39 @@
 /* Base */
 :root{
-	--bg:#0b0b0b; --card:#0f0f12; --muted:#9aa3b2; --accent:#1e88e5; --success:#2e7d32
+  --bg:#0b0b0b;
+  --surface:#070708;
+  --card:#0f0f12;
+  --text:#e8eef6;
+  --muted:#9aa3b2;
+  --accent:#1e88e5;
+  --accent-soft:rgba(30,136,229,0.12);
+  --border:#111418;
+  --success:#2e7d32;
+  --danger:#e53935;
 }
-body{font-family:Segoe UI,Arial,Helvetica,sans-serif;background:var(--bg);color:#e8eef6;margin:0;padding:0}
+html[data-theme="light"]{
+  --bg:#f4f5f7;
+  --surface:#ffffff;
+  --card:#f8fafc;
+  --text:#0f172a;
+  --muted:#64748b;
+  --accent:#1d4ed8;
+  --accent-soft:rgba(29,78,216,0.12);
+  --border:#d1d5db;
+  --success:#166534;
+  --danger:#b91c1c;
+}
+body{font-family:Segoe UI,Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:0}
 
 /* Topbar */
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:#070708;border-bottom:1px solid #111}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--surface);border-bottom:1px solid var(--border)}
 .brand{font-weight:700;font-size:18px;color:var(--accent)}
 .topbar .search{flex:1;margin:0 18px}
-.topbar input{width:100%;padding:8px 10px;border-radius:8px;border:1px solid #222;background:#0b0b0e;color:inherit}
+.topbar input{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
 .topbar button{margin-left:8px;padding:8px 12px;border-radius:8px;border:none;background:var(--accent);color:#fff}
 .topbar .actions .btn{background:var(--accent);padding:8px 12px;border-radius:8px;color:#fff;text-decoration:none}
+.topbar .actions .btn.secondary{background:var(--border);color:var(--text);border:1px solid var(--border)}
+.topbar .actions .theme-toggle{background:transparent;color:var(--text);border:1px solid var(--border);padding:8px 12px;margin-left:8px;border-radius:8px;cursor:pointer}
 
 /* Hero */
 .hero{padding:36px 20px;text-align:center;background:linear-gradient(90deg, rgba(30,136,229,0.08), transparent)}
@@ -21,26 +44,31 @@ body{font-family:Segoe UI,Arial,Helvetica,sans-serif;background:var(--bg);color:
 main{padding:20px}
 .empty{color:var(--muted)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:18px}
-.card{background:var(--card);padding:14px;border-radius:10px;border:1px solid #151518;box-shadow:0 2px 6px rgba(0,0,0,0.4)}
+.card{background:var(--card);padding:14px;border-radius:10px;border:1px solid var(--border);box-shadow:0 2px 6px rgba(0,0,0,0.18)}
 .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .card h3{margin:0;font-size:16px}
 .muted{color:var(--muted)}
-.desc{margin:8px 0;color:#cbd6e6;font-size:13px}
+.desc{margin:8px 0;color:var(--muted);font-size:13px}
 .tags{display:flex;gap:6px;flex-wrap:wrap}
-.tag{background:#0b2436;color:#9fd7ff;padding:4px 8px;border-radius:999px;font-size:12px}
+.tag{background:var(--accent-soft);color:var(--accent);padding:4px 8px;border-radius:999px;font-size:12px}
 .card-actions{margin-top:12px}
 .card .view{display:inline-block;padding:8px 12px;background:var(--success);color:#fff;border-radius:8px;text-decoration:none}
 .card:hover{transform:translateY(-4px);transition:all 0.16s ease}
 
 /* Upload & view pages */
 .upload-main,.view-main{max-width:980px;margin:24px auto;padding:0 18px}
-.upload-form{background:var(--card);padding:16px;border-radius:10px;border:1px solid #151518}
+.upload-form{background:var(--card);padding:16px;border-radius:10px;border:1px solid var(--border)}
 .upload-form label{display:block;margin-bottom:10px}
-.upload-form input,.upload-form textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #222;background:#060607;color:inherit}
+.upload-form input,.upload-form textarea{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
 button, .upload-form button{background:var(--accent);color:#fff;padding:10px 14px;border-radius:8px;border:none}
 
 .view-header{max-width:980px;margin:14px auto;padding:0 18px}
 .iframe-wrap{max-width:980px;margin:8px auto}
 .btn.small{padding:6px 10px;font-size:13px}
 
-footer{padding:18px 20px;color:var(--muted);border-top:1px solid #111}
+.pong-page{max-width:980px;margin:24px auto;padding:0 18px;text-align:center}
+.pong-canvas-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;display:inline-block;padding:18px}
+#pongCanvas{display:block;background:var(--bg);border-radius:12px;box-shadow:0 16px 58px rgba(0,0,0,0.3)}
+.pong-instructions{margin-top:16px;color:var(--muted);font-size:15px}
+
+footer{padding:18px 20px;color:var(--muted);border-top:1px solid var(--border)}
