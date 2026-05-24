@@ -1,16 +1,18 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Upload — {{ site_name }}</title>
   <link rel="stylesheet" href="/static/style.css">
+  {% if ui_accent %}<style>:root{--accent:{{ ui_accent }};}</style>{% endif %}
 </head>
 <body>
   <nav class="topbar">
     <div class="brand">{{ site_name }}</div>
     <div class="actions">
       <a class="btn" href="/">Back</a>
+      <a class="btn" href="/admin">Admin</a>
       <button id="themeToggle" class="theme-toggle" type="button">Toggle Theme</button>
     </div>
   </nav>
@@ -32,6 +34,7 @@
       <label>Description<br><textarea name="description"></textarea></label>
       <label>Tags (comma separated)<br><input name="tags"></label>
       <label>Project ZIP (must include an index.html)<br><input type="file" name="file" accept=".zip" required></label>
+      <label>Thumbnail<br><input type="file" name="thumbnail" accept=".png,.jpg,.jpeg,.gif,.webp"></label>
       <button type="submit">Upload</button>
     </form>
   </main>

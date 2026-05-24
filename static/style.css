@@ -34,6 +34,9 @@ body{font-family:Segoe UI,Arial,Helvetica,sans-serif;background:var(--bg);color:
 .topbar .actions .btn{background:var(--accent);padding:8px 12px;border-radius:8px;color:#fff;text-decoration:none}
 .topbar .actions .btn.secondary{background:var(--border);color:var(--text);border:1px solid var(--border)}
 .topbar .actions .theme-toggle{background:transparent;color:var(--text);border:1px solid var(--border);padding:8px 12px;margin-left:8px;border-radius:8px;cursor:pointer}
+.actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.inline-form{display:inline}
+.inline-form button{margin-left:0}
 
 /* Hero */
 .hero{padding:36px 20px;text-align:center;background:linear-gradient(90deg, rgba(30,136,229,0.08), transparent)}
@@ -45,6 +48,7 @@ main{padding:20px}
 .empty{color:var(--muted)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:18px}
 .card{background:var(--card);padding:14px;border-radius:10px;border:1px solid var(--border);box-shadow:0 2px 6px rgba(0,0,0,0.18)}
+.thumb{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:12px;background:var(--surface)}
 .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .card h3{margin:0;font-size:16px}
 .muted{color:var(--muted)}
@@ -61,14 +65,26 @@ main{padding:20px}
 .upload-form label{display:block;margin-bottom:10px}
 .upload-form input,.upload-form textarea{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
 button, .upload-form button{background:var(--accent);color:#fff;padding:10px 14px;border-radius:8px;border:none}
+button.danger{background:var(--danger)}
 
 .view-header{max-width:980px;margin:14px auto;padding:0 18px}
 .iframe-wrap{max-width:980px;margin:8px auto}
 .btn.small{padding:6px 10px;font-size:13px}
 
-.pong-page{max-width:980px;margin:24px auto;padding:0 18px;text-align:center}
-.pong-canvas-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;display:inline-block;padding:18px}
-#pongCanvas{display:block;background:var(--bg);border-radius:12px;box-shadow:0 16px 58px rgba(0,0,0,0.3)}
-.pong-instructions{margin-top:16px;color:var(--muted);font-size:15px}
+.auth-main{min-height:100vh;display:grid;place-items:center;padding:24px}
+.auth-panel{max-width:420px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:24px;text-align:center}
+.auth-panel h1{margin-top:0;color:var(--accent)}
+.btn.google{display:inline-block;margin-top:12px}
+.flashes{background:var(--accent-soft);border:1px solid var(--border);border-radius:8px;padding:12px 16px;color:var(--text)}
+.notice{background:var(--accent-soft);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+
+.admin-main{max-width:1100px;margin:24px auto;padding:0 18px}
+.admin-header{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap}
+.admin-search,.lulu-form{display:flex;gap:8px;flex:1;min-width:280px}
+.admin-search input,.lulu-form input{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
+.admin-section{margin-top:22px}
+.admin-list{display:grid;gap:10px}
+.admin-row{display:flex;justify-content:space-between;gap:16px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px}
+.admin-row p{margin:4px 0 0}
 
 footer{padding:18px 20px;color:var(--muted);border-top:1px solid var(--border)}

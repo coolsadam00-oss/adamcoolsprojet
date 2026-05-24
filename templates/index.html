@@ -1,10 +1,11 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>{{ site_name }} — Games</title>
   <link rel="stylesheet" href="/static/style.css">
+  {% if ui_accent %}<style>:root{--accent:{{ ui_accent }};}</style>{% endif %}
 </head>
 <body>
   <nav class="topbar">
@@ -16,8 +17,11 @@
       </form>
     </div>
     <div class="actions">
-      <a class="btn" href="/upload">Upload Game</a>
-      <a class="btn secondary" href="/pong">Play Pong</a>
+      {% if is_admin %}
+        <a class="btn" href="/admin">Admin</a>
+        <a class="btn" href="/upload">Upload Game</a>
+      {% endif %}
+      <form method="post" action="/logout" class="inline-form"><button type="submit">Sign out</button></form>
       <button id="themeToggle" class="theme-toggle" type="button">Toggle Theme</button>
     </div>
   </nav>
@@ -35,6 +39,9 @@
     <div class="grid">
       {% for p in projects %}
       <div class="card">
+        {% if p.thumbnail %}
+          <img class="thumb" src="/project_files/{{ p.id }}/{{ p.thumbnail }}" alt="">
+        {% endif %}
         <div class="card-head">
           <h3>{{ p.title }}</h3>
           <div class="tags">
