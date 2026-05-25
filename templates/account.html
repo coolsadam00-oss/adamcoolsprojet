@@ -4,12 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Account - {{ site_name }}</title>
+  <link rel="icon" href="/static/site-icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
   {% if ui_accent %}<style>:root{--accent:{{ ui_accent }};}</style>{% endif %}
 </head>
 <body>
   <nav class="topbar">
-    <div class="brand">{{ site_name }}</div>
+    <a class="brand brand-lockup" href="/"><img src="/static/site-icon.svg" alt=""> <span>{{ site_name }}</span></a>
     <div class="actions">
       <a class="btn" href="/">Back</a>
       <form method="post" action="/logout" class="inline-form"><button type="submit">Sign out</button></form>
@@ -20,6 +21,21 @@
     <section class="account-panel">
       <h1>Your account</h1>
       <p class="muted">{{ current_user.email }}</p>
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <ul class="flashes">
+          {% for m in messages %}
+            <li>{{ m }}</li>
+          {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+      <form method="post" action="/account/profile" class="profile-form">
+        <h2>Public profile</h2>
+        <p class="muted">This username can be found with website search.</p>
+        <label>Username<input name="username" maxlength="32" value="{{ display_name }}" required></label>
+        <button type="submit">Save username</button>
+      </form>
       <form method="post" action="/account/delete" class="danger-zone">
         <h2>Delete account</h2>
         <p>This removes your account and signs you out. It does not remove games from the website.</p>

@@ -4,12 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>{{ site_name }} — Games</title>
+  <link rel="icon" href="/static/site-icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
   {% if ui_accent %}<style>:root{--accent:{{ ui_accent }};}</style>{% endif %}
 </head>
 <body>
   <nav class="topbar">
-    <div class="brand">{{ site_name }}</div>
+    <a class="brand brand-lockup" href="/"><img src="/static/site-icon.svg" alt=""> <span>{{ site_name }}</span></a>
     <div class="search">
       <form method="get" action="/">
         <input name="q" placeholder="Search games, tags, description..." value="{{ q|e }}" />
@@ -22,7 +23,10 @@
         <a class="btn" href="/upload">Upload Game</a>
       {% endif %}
       {% if current_user %}
-        <a class="btn secondary" href="/account">Account</a>
+        <a class="profile-chip" href="/account" aria-label="Open account">
+          <span class="profile-avatar">{{ display_name[:1]|upper }}</span>
+          <span class="profile-name">{{ display_name }}</span>
+        </a>
         <form method="post" action="/logout" class="inline-form"><button type="submit">Sign out</button></form>
       {% else %}
         <a class="btn secondary" href="/login">Sign in</a>
@@ -37,6 +41,20 @@
   </header>
 
   <main>
+    {% if q and users|length > 0 %}
+      <section class="people-results">
+        <h2>Players</h2>
+        <div class="people-list">
+          {% for u in users %}
+            <div class="person-pill">
+              <span class="profile-avatar">{{ (u.name or '?')[:1]|upper }}</span>
+              <span>{{ u.name }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
     {% if projects|length == 0 %}
       <p class="empty">No projects yet. Click "Upload Game" to add your game (zip with index.html).</p>
     {% endif %}

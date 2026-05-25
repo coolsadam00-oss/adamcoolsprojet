@@ -67,6 +67,7 @@ def inject_site_name():
         "ui_accent": get_setting("accent_color", ""),
         "current_user": current_user(),
         "is_admin": is_admin(),
+        "display_name": display_name(current_user()),
     }
 
 
@@ -205,6 +206,12 @@ def current_user():
 def is_admin():
     user = current_user()
     return bool(user and user["is_admin"])
+
+
+def display_name(user):
+    if not user:
+        return ""
+    return user["name"] or user["email"].split("@")[0]
 
 
 def login_required(view):
@@ -378,8 +385,15 @@ def index():
         ).fetchall()
     else:
         rows = db.execute("SELECT * FROM projects ORDER BY id DESC").fetchall()
+    if q:
+        users = db.execute(
+            "SELECT id, name FROM users WHERE email_verified = 1 AND name LIKE ? ORDER BY name LIMIT 12",
+            (like,),
+        ).fetchall()
+    else:
+        users = []
     projects = [dict(r) for r in rows]
-    return render_template("index.html", projects=projects, q=q)
+    return render_template("index.html", projects=projects, users=users, q=q)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -551,6 +565,26 @@ def logout():
 @login_required
 def account():
     return render_template("account.html")
+
+
+@app.route("/account/profile", methods=["POST"])
+@login_required
+def update_profile():
+    username = " ".join(request.form.get("username", "").split())
+    if len(username) < 2 or len(username) > 32:
+        flash("Username must be 2 to 32 characters.")
+        return redirect(url_for("account"))
+    if not re.fullmatch(r"[A-Za-z0-9 _.-]+", username):
+        flash("Username can use letters, numbers, spaces, dots, dashes, and underscores.")
+        return redirect(url_for("account"))
+    get_db().execute(
+        "UPDATE users SET name = ? WHERE id = ?",
+        (username, current_user()["id"]),
+    )
+    get_db().commit()
+    g.current_user = None
+    flash("Username saved.")
+    return redirect(url_for("account"))
 
 
 @app.route("/account/delete", methods=["POST"])

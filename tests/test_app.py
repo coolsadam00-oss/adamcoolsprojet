@@ -255,6 +255,32 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/login", response.headers["Location"])
 
+    def test_signed_in_user_can_update_public_username(self):
+        user_id = self.login("player@example.com", "Player")
+
+        response = self.client.post(
+            "/account/profile",
+            data={"username": "Cool Player"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            user = site.get_db().execute(
+                "SELECT name FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+        self.assertEqual(user["name"], "Cool Player")
+
+    def test_home_search_finds_public_usernames(self):
+        with site.app.app_context():
+            site.upsert_user("searchable@example.com", "Cool Player")
+
+        response = self.client.get("/?q=Cool")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Players", response.data)
+        self.assertIn(b"Cool Player", response.data)
+
     def test_legal_pages_render(self):
         terms = self.client.get("/terms")
         privacy = self.client.get("/privacy")

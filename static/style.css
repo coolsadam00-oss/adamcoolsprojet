@@ -28,8 +28,11 @@ body{font-family:Segoe UI,Arial,Helvetica,sans-serif;background:var(--bg);color:
 a{color:inherit}
 
 /* Topbar */
-.topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 20px;background:var(--surface);border-bottom:1px solid var(--border)}
-.brand{font-weight:700;font-size:18px;color:var(--accent)}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 20px;background:color-mix(in srgb,var(--surface) 92%,var(--accent) 8%);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+.brand{font-weight:800;font-size:18px;color:var(--text);text-decoration:none}
+.brand-lockup{display:inline-flex;align-items:center;gap:10px;min-width:0}
+.brand-lockup img{width:34px;height:34px;border-radius:10px;box-shadow:0 8px 24px rgba(30,136,229,0.22)}
+.brand-lockup span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .topbar .search{flex:1;margin:0 18px}
 .topbar .search form{display:flex;gap:8px}
 .topbar input{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
@@ -40,6 +43,9 @@ a{color:inherit}
 .actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .inline-form{display:inline}
 .inline-form button{margin-left:0}
+.profile-chip{display:inline-flex;align-items:center;gap:8px;padding:5px 10px 5px 5px;border:1px solid var(--border);border-radius:999px;background:var(--card);color:var(--text);text-decoration:none;max-width:220px}
+.profile-avatar{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--accent);color:#f8fafc;font-weight:800;font-size:14px;flex:0 0 auto}
+.profile-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;font-size:14px}
 
 /* Hero */
 .hero{padding:36px 20px;text-align:center;background:linear-gradient(90deg, rgba(30,136,229,0.08), transparent)}
@@ -61,6 +67,10 @@ main{padding:20px}
 .card-actions{margin-top:12px}
 .card .view{display:inline-block;padding:8px 12px;background:var(--success);color:#fff;border-radius:8px;text-decoration:none}
 .card:hover{transform:translateY(-4px);transition:all 0.16s ease}
+.people-results{margin:0 0 20px}
+.people-results h2{font-size:18px;margin:0 0 10px}
+.people-list{display:flex;gap:10px;flex-wrap:wrap}
+.person-pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:999px;background:var(--card)}
 
 /* Upload & view pages */
 .upload-main,.view-main{max-width:980px;margin:24px auto;padding:0 18px}
@@ -79,7 +89,7 @@ button.danger{background:var(--danger)}
 .auth-main{min-height:100vh;display:grid;place-items:center;padding:28px;background:radial-gradient(circle at top left, var(--accent-soft), transparent 34%),var(--bg)}
 .auth-shell{width:min(1040px,100%);display:grid;grid-template-columns:minmax(260px,0.9fr) minmax(320px,1.1fr);gap:28px;align-items:start}
 .auth-intro{padding:28px 4px}
-.auth-brand{display:inline-block;color:var(--accent);font-weight:800;text-decoration:none;margin-bottom:28px}
+.auth-brand{color:var(--accent);font-weight:800;text-decoration:none;margin-bottom:28px}
 .auth-intro h1{font-size:clamp(34px,5vw,56px);line-height:1.02;margin:0 0 18px;max-width:10ch}
 .auth-intro p{color:var(--muted);font-size:17px;line-height:1.6;max-width:48ch}
 .guest-link,.google-link{display:inline-block;margin-top:12px;color:var(--text);text-decoration:none;border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--surface)}
@@ -105,6 +115,10 @@ button.danger{background:var(--danger)}
 
 .account-main{max-width:720px;margin:28px auto;padding:0 18px}
 .account-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px}
+.profile-form{margin-top:18px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
+.profile-form h2{margin:0 0 8px;font-size:20px}
+.profile-form label{display:block;margin:14px 0;color:var(--muted);font-size:13px}
+.profile-form input{width:100%;margin-top:6px;padding:11px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
 .danger-zone{margin-top:22px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
 .danger-zone h2{margin:0 0 8px;font-size:20px}
 .danger-zone p{color:var(--muted);line-height:1.5}

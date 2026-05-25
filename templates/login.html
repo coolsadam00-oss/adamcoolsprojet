@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Sign in - {{ site_name }}</title>
+  <link rel="icon" href="/static/site-icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
   {% if ui_accent %}<style>:root{--accent:{{ ui_accent }};}</style>{% endif %}
 </head>
@@ -11,7 +12,7 @@
   <main class="auth-main">
     <section class="auth-shell">
       <div class="auth-intro">
-        <a class="auth-brand" href="/">{{ site_name }}</a>
+        <a class="auth-brand brand-lockup" href="/"><img src="/static/site-icon.svg" alt=""> <span>{{ site_name }}</span></a>
         <h1>Play as guest, sign in when you want an account.</h1>
         <p>Search and play games without logging in. Create an account to keep your identity, verify your email, and unlock admin tools if you have access.</p>
         <a class="guest-link" href="/">Continue as guest</a>
