@@ -234,6 +234,27 @@ class SiteAuthAdminTests(unittest.TestCase):
             ).fetchone()
         self.assertEqual(sent[0][1], user["verification_token"])
 
+    def test_signed_in_user_can_delete_own_account(self):
+        user_id = self.login("delete-me@example.com", "Delete Me")
+
+        response = self.client.post("/account/delete")
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            user = site.get_db().execute(
+                "SELECT * FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+        self.assertIsNone(user)
+        with self.client.session_transaction() as session:
+            self.assertNotIn("user_id", session)
+
+    def test_guest_cannot_delete_account(self):
+        response = self.client.post("/account/delete")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login", response.headers["Location"])
+
     def test_legal_pages_render(self):
         terms = self.client.get("/terms")
         privacy = self.client.get("/privacy")

@@ -547,6 +547,23 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.route("/account")
+@login_required
+def account():
+    return render_template("account.html")
+
+
+@app.route("/account/delete", methods=["POST"])
+@login_required
+def delete_account():
+    user = current_user()
+    get_db().execute("DELETE FROM users WHERE id = ?", (user["id"],))
+    get_db().commit()
+    session.clear()
+    flash("Your account was deleted.")
+    return redirect(url_for("index"))
+
+
 @app.route("/upload", methods=["GET", "POST"])
 @admin_required
 def upload():

@@ -103,6 +103,12 @@ button.danger{background:var(--danger)}
 .legal-main h2{margin-top:24px;font-size:20px}
 .legal-main a, footer a, .auth-form a{color:var(--accent)}
 
+.account-main{max-width:720px;margin:28px auto;padding:0 18px}
+.account-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px}
+.danger-zone{margin-top:22px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
+.danger-zone h2{margin:0 0 8px;font-size:20px}
+.danger-zone p{color:var(--muted);line-height:1.5}
+
 .admin-main{max-width:1100px;margin:24px auto;padding:0 18px}
 .admin-header{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap}
 .admin-search,.lulu-form{display:flex;gap:8px;flex:1;min-width:min(280px,100%)}

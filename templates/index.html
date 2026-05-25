@@ -22,6 +22,7 @@
         <a class="btn" href="/upload">Upload Game</a>
       {% endif %}
       {% if current_user %}
+        <a class="btn secondary" href="/account">Account</a>
         <form method="post" action="/logout" class="inline-form"><button type="submit">Sign out</button></form>
       {% else %}
         <a class="btn secondary" href="/login">Sign in</a>
