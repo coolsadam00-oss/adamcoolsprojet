@@ -9,9 +9,14 @@
 </head>
 <body>
   <main class="auth-main">
-    <section class="auth-panel">
-      <h1>{{ site_name }}</h1>
-      <p class="muted">Sign in with Google to save your account and unlock admin tools if you have access.</p>
+    <section class="auth-shell">
+      <div class="auth-intro">
+        <a class="auth-brand" href="/">{{ site_name }}</a>
+        <h1>Play as guest, sign in when you want an account.</h1>
+        <p>Search and play games without logging in. Create an account to keep your identity, verify your email, and unlock admin tools if you have access.</p>
+        <a class="guest-link" href="/">Continue as guest</a>
+      </div>
+      <div class="auth-panel">
       {% with messages = get_flashed_messages() %}
         {% if messages %}
           <ul class="flashes">
@@ -21,29 +26,35 @@
           </ul>
         {% endif %}
       {% endwith %}
-      {% if google_ready %}
-        <a class="btn google" href="/auth/google">Sign in with Google</a>
-      {% else %}
-        <p class="empty">Google sign-in needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.</p>
-      {% endif %}
       <div class="auth-forms">
         <form method="post" action="/login" class="auth-form">
           <h2>Sign in</h2>
+          <p class="form-note">Use this after your email is verified.</p>
           <input type="hidden" name="next" value="{{ next_url }}">
-          <label>Email<br><input name="email" type="email" autocomplete="email" required></label>
-          <label>Password<br><input name="password" type="password" autocomplete="current-password" required></label>
+          <label>Email<input name="email" type="email" autocomplete="email" required></label>
+          <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
           <button type="submit">Sign in</button>
         </form>
         <form method="post" action="/signup" class="auth-form">
           <h2>Sign up</h2>
-          <label>Email<br><input name="email" type="email" autocomplete="email" required></label>
-          <label>Password<br><input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
-          <label>Confirm password<br><input name="confirm_password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <p class="form-note">We send a link so nobody can use your email without permission.</p>
+          <label>Email<input name="email" type="email" autocomplete="email" required></label>
+          <label>Password<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label>Confirm password<input name="confirm_password" type="password" autocomplete="new-password" minlength="8" required></label>
           <label class="check-row"><input name="agree_terms" type="checkbox" required> I agree to the <a href="/terms">Website Rules</a> and <a href="/privacy">Privacy Policy</a>.</label>
           <button type="submit">Create account</button>
         </form>
+        <form method="post" action="/resend-verification" class="auth-form auth-form-soft">
+          <h2>Need the email again?</h2>
+          <p class="form-note">If the site says your email is not verified, resend the link and check spam too.</p>
+          <label>Email<input name="email" type="email" autocomplete="email" required></label>
+          <button type="submit">Resend verification</button>
+        </form>
+        {% if google_ready %}
+          <a class="google-link" href="/auth/google">Sign in with Google</a>
+        {% endif %}
       </div>
-      <p><a class="view" href="/">Continue as guest</a></p>
+      </div>
     </section>
   </main>
 </body>

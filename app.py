@@ -296,8 +296,18 @@ def authenticate_password_user(email, password):
     if not check_password_hash(user["password_hash"], password):
         return None, "Email or password is wrong."
     if not user["email_verified"]:
-        return None, "Please verify your email before signing in."
+        return None, "Your account exists, but the email is not verified yet. Check your inbox or resend the link."
     return user, None
+
+
+def refresh_verification_token(user_id):
+    token = secrets.token_urlsafe(32)
+    get_db().execute(
+        "UPDATE users SET verification_token = ? WHERE id = ?",
+        (token, user_id),
+    )
+    get_db().commit()
+    return token
 
 
 def save_thumbnail(file, folder):
@@ -414,7 +424,26 @@ def signup():
 
     user = create_password_user(email, password)
     send_verification_email(user["email"], user["verification_token"])
-    flash("Account created. Check your email and click the verification link.")
+    flash("Account created. Check your inbox, then click the verification link.")
+    return redirect(url_for("login"))
+
+
+@app.route("/resend-verification", methods=["POST"])
+def resend_verification():
+    email = request.form.get("email", "").strip().lower()
+    user = get_db().execute(
+        "SELECT * FROM users WHERE email = ?",
+        (email,),
+    ).fetchone()
+    if not user:
+        flash("No account was found for that email.")
+        return redirect(url_for("login"))
+    if user["email_verified"]:
+        flash("That email is already verified. You can sign in.")
+        return redirect(url_for("login"))
+    token = user["verification_token"] or refresh_verification_token(user["id"])
+    send_verification_email(user["email"], token)
+    flash("Verification email sent again. Check your inbox and spam folder.")
     return redirect(url_for("login"))
 
 

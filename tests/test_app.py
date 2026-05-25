@@ -206,6 +206,34 @@ class SiteAuthAdminTests(unittest.TestCase):
         with self.client.session_transaction() as session:
             self.assertNotIn("user_id", session)
 
+    def test_unverified_user_can_request_another_verification_email(self):
+        sent = []
+        with mock.patch.object(site, "send_verification_email"):
+            self.client.post(
+                "/signup",
+                data={
+                    "email": "new@example.com",
+                    "password": "secret123",
+                    "confirm_password": "secret123",
+                    "agree_terms": "on",
+                },
+            )
+
+        with mock.patch.object(site, "send_verification_email", side_effect=lambda email, token: sent.append((email, token))):
+            response = self.client.post(
+                "/resend-verification",
+                data={"email": "new@example.com"},
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(sent[0][0], "new@example.com")
+        with site.app.app_context():
+            user = site.get_db().execute(
+                "SELECT verification_token FROM users WHERE email = ?",
+                ("new@example.com",),
+            ).fetchone()
+        self.assertEqual(sent[0][1], user["verification_token"])
+
     def test_legal_pages_render(self):
         terms = self.client.get("/terms")
         privacy = self.client.get("/privacy")
