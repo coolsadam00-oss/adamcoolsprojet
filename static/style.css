@@ -74,7 +74,12 @@ button.danger{background:var(--danger)}
 .auth-main{min-height:100vh;display:grid;place-items:center;padding:24px}
 .auth-panel{max-width:420px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:24px;text-align:center}
 .auth-panel h1{margin-top:0;color:var(--accent)}
+.auth-panel h2{font-size:18px;margin:0 0 12px}
 .btn.google{display:inline-block;margin-top:12px}
+.auth-forms{display:grid;gap:14px;margin-top:18px;text-align:left}
+.auth-form{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px}
+.auth-form label{display:block;margin-bottom:10px}
+.auth-form input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit;box-sizing:border-box}
 .flashes{background:var(--accent-soft);border:1px solid var(--border);border-radius:8px;padding:12px 16px;color:var(--text)}
 .notice{background:var(--accent-soft);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
 

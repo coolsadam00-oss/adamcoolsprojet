@@ -97,6 +97,94 @@ class SiteAuthAdminTests(unittest.TestCase):
         with self.client.session_transaction() as session:
             self.assertEqual(session["oauth_next"], "/admin")
 
+    def test_signup_rejects_mismatched_passwords(self):
+        response = self.client.post(
+            "/signup",
+            data={
+                "email": "new@example.com",
+                "password": "secret123",
+                "confirm_password": "different",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            user = site.get_db().execute(
+                "SELECT * FROM users WHERE email = ?",
+                ("new@example.com",),
+            ).fetchone()
+        self.assertIsNone(user)
+
+    def test_signup_creates_unverified_user_and_sends_email(self):
+        sent = []
+        with mock.patch.object(site, "send_verification_email", side_effect=lambda email, token: sent.append((email, token))):
+            response = self.client.post(
+                "/signup",
+                data={
+                    "email": "new@example.com",
+                    "password": "secret123",
+                    "confirm_password": "secret123",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            user = site.get_db().execute(
+                "SELECT * FROM users WHERE email = ?",
+                ("new@example.com",),
+            ).fetchone()
+        self.assertEqual(user["email_verified"], 0)
+        self.assertTrue(user["password_hash"])
+        self.assertEqual(sent[0][0], "new@example.com")
+        self.assertEqual(sent[0][1], user["verification_token"])
+
+    def test_verify_email_allows_password_login(self):
+        with mock.patch.object(site, "send_verification_email"):
+            self.client.post(
+                "/signup",
+                data={
+                    "email": "new@example.com",
+                    "password": "secret123",
+                    "confirm_password": "secret123",
+                },
+            )
+        with site.app.app_context():
+            token = site.get_db().execute(
+                "SELECT verification_token FROM users WHERE email = ?",
+                ("new@example.com",),
+            ).fetchone()["verification_token"]
+
+        verify_response = self.client.get(f"/verify-email/{token}")
+        login_response = self.client.post(
+            "/login",
+            data={"email": "new@example.com", "password": "secret123"},
+        )
+
+        self.assertEqual(verify_response.status_code, 302)
+        self.assertEqual(login_response.status_code, 302)
+        with self.client.session_transaction() as session:
+            self.assertIn("user_id", session)
+
+    def test_unverified_user_cannot_password_login(self):
+        with mock.patch.object(site, "send_verification_email"):
+            self.client.post(
+                "/signup",
+                data={
+                    "email": "new@example.com",
+                    "password": "secret123",
+                    "confirm_password": "secret123",
+                },
+            )
+
+        response = self.client.post(
+            "/login",
+            data={"email": "new@example.com", "password": "secret123"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.client.session_transaction() as session:
+            self.assertNotIn("user_id", session)
+
     def test_admin_can_upload_game_with_thumbnail(self):
         self.login()
 

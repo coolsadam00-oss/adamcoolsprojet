@@ -1,12 +1,15 @@
 import os
 import re
 import shutil
+import secrets
+import smtplib
 import sqlite3
 import zipfile
 import datetime
 import urllib.parse
 import urllib.request
 import json
+from email.message import EmailMessage
 from functools import wraps
 from flask import (
     Flask,
@@ -21,6 +24,7 @@ from flask import (
     session,
 )
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import check_password_hash, generate_password_hash
 
 try:
     from google.auth.transport import requests as google_requests
@@ -101,6 +105,15 @@ def init_db():
         )
         """
     )
+    user_columns = {
+        row["name"] for row in db.execute("PRAGMA table_info(users)").fetchall()
+    }
+    if "password_hash" not in user_columns:
+        db.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
+    if "email_verified" not in user_columns:
+        db.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0")
+    if "verification_token" not in user_columns:
+        db.execute("ALTER TABLE users ADD COLUMN verification_token TEXT")
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS settings (
@@ -163,14 +176,15 @@ def upsert_user(email, name="", picture=""):
     if existing:
         db.execute(
             "UPDATE users SET name = ?, picture = ?, last_login = ?, "
+            "email_verified = 1, "
             "is_admin = CASE WHEN email = ? THEN 1 ELSE is_admin END WHERE id = ?",
             (name or existing["name"], picture or existing["picture"], now, ADMIN_EMAIL, existing["id"]),
         )
     else:
         db.execute(
-            "INSERT INTO users (email, name, picture, is_admin, created_at, last_login) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (email, name, picture, is_seed_admin, now, now),
+            "INSERT INTO users (email, name, picture, is_admin, created_at, last_login, email_verified) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (email, name, picture, is_seed_admin, now, now, 1),
         )
     db.commit()
     return db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
@@ -218,6 +232,72 @@ def safe_next_url(value):
     if value and value.startswith("/") and not value.startswith("//"):
         return value
     return url_for("index")
+
+
+def create_password_user(email, password):
+    email = email.strip().lower()
+    token = secrets.token_urlsafe(32)
+    now = datetime.datetime.now(datetime.UTC).isoformat()
+    db = get_db()
+    existing = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    password_hash = generate_password_hash(password)
+    is_seed_admin = 1 if email == ADMIN_EMAIL else 0
+    if existing:
+        db.execute(
+            "UPDATE users SET password_hash = ?, verification_token = ?, "
+            "email_verified = 0, is_admin = CASE WHEN email = ? THEN 1 ELSE is_admin END "
+            "WHERE id = ?",
+            (password_hash, token, ADMIN_EMAIL, existing["id"]),
+        )
+    else:
+        db.execute(
+            "INSERT INTO users (email, name, picture, is_admin, created_at, last_login, "
+            "password_hash, email_verified, verification_token) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
+            (email, email.split("@")[0], "", is_seed_admin, now, now, password_hash, token),
+        )
+    db.commit()
+    return db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+
+
+def send_verification_email(email, token):
+    verify_url = url_for("verify_email", token=token, _external=True)
+    host = os.environ.get("SMTP_HOST")
+    username = os.environ.get("SMTP_USERNAME")
+    password = os.environ.get("SMTP_PASSWORD")
+    sender = os.environ.get("SMTP_FROM", username or "no-reply@example.com")
+    if not host or not username or not password:
+        app.logger.warning("Email verification link for %s: %s", email, verify_url)
+        return
+
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    message = EmailMessage()
+    message["Subject"] = f"Verify your {get_setting('site_name', app.config['SITE_NAME'])} account"
+    message["From"] = sender
+    message["To"] = email
+    message.set_content(
+        "Click this link to verify your account:\n\n"
+        f"{verify_url}\n\n"
+        "If you did not create this account, you can ignore this email."
+    )
+    with smtplib.SMTP(host, port, timeout=15) as smtp:
+        smtp.starttls()
+        smtp.login(username, password)
+        smtp.send_message(message)
+
+
+def authenticate_password_user(email, password):
+    user = get_db().execute(
+        "SELECT * FROM users WHERE email = ?",
+        (email.strip().lower(),),
+    ).fetchone()
+    if not user or not user["password_hash"]:
+        return None, "Email or password is wrong."
+    if not check_password_hash(user["password_hash"], password):
+        return None, "Email or password is wrong."
+    if not user["email_verified"]:
+        return None, "Please verify your email before signing in."
+    return user, None
 
 
 def save_thumbnail(file, folder):
@@ -292,12 +372,65 @@ def index():
     return render_template("index.html", projects=projects, q=q)
 
 
-@app.route("/login")
+@app.route("/login", methods=["GET", "POST"])
 def login():
+    if request.method == "POST":
+        user, error = authenticate_password_user(
+            request.form.get("email", ""),
+            request.form.get("password", ""),
+        )
+        if error:
+            flash(error)
+            return redirect(url_for("login"))
+        session.clear()
+        session["user_id"] = user["id"]
+        return redirect(safe_next_url(request.form.get("next")))
+
     return render_template(
         "login.html",
         google_ready=bool(os.environ.get("GOOGLE_CLIENT_ID") and os.environ.get("GOOGLE_CLIENT_SECRET")),
+        next_url=safe_next_url(request.args.get("next")),
     )
+
+
+@app.route("/signup", methods=["POST"])
+def signup():
+    email = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "")
+    confirm_password = request.form.get("confirm_password", "")
+    if not email or "@" not in email:
+        flash("Enter a valid email address.")
+        return redirect(url_for("login"))
+    if len(password) < 8:
+        flash("Password must be at least 8 characters.")
+        return redirect(url_for("login"))
+    if password != confirm_password:
+        flash("Passwords do not match.")
+        return redirect(url_for("login"))
+
+    user = create_password_user(email, password)
+    send_verification_email(user["email"], user["verification_token"])
+    flash("Account created. Check your email and click the verification link.")
+    return redirect(url_for("login"))
+
+
+@app.route("/verify-email/<token>")
+def verify_email(token):
+    db = get_db()
+    user = db.execute(
+        "SELECT * FROM users WHERE verification_token = ?",
+        (token,),
+    ).fetchone()
+    if not user:
+        flash("That verification link is invalid or expired.")
+        return redirect(url_for("login"))
+    db.execute(
+        "UPDATE users SET email_verified = 1, verification_token = NULL WHERE id = ?",
+        (user["id"],),
+    )
+    db.commit()
+    flash("Email verified. You can sign in now.")
+    return redirect(url_for("login"))
 
 
 @app.route("/auth/google")

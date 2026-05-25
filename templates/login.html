@@ -26,6 +26,22 @@
       {% else %}
         <p class="empty">Google sign-in needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.</p>
       {% endif %}
+      <div class="auth-forms">
+        <form method="post" action="/login" class="auth-form">
+          <h2>Sign in</h2>
+          <input type="hidden" name="next" value="{{ next_url }}">
+          <label>Email<br><input name="email" type="email" autocomplete="email" required></label>
+          <label>Password<br><input name="password" type="password" autocomplete="current-password" required></label>
+          <button type="submit">Sign in</button>
+        </form>
+        <form method="post" action="/signup" class="auth-form">
+          <h2>Sign up</h2>
+          <label>Email<br><input name="email" type="email" autocomplete="email" required></label>
+          <label>Password<br><input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label>Confirm password<br><input name="confirm_password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <button type="submit">Create account</button>
+        </form>
+      </div>
       <p><a class="view" href="/">Continue as guest</a></p>
     </section>
   </main>
