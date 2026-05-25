@@ -80,8 +80,15 @@ button.danger{background:var(--danger)}
 .auth-form{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px}
 .auth-form label{display:block;margin-bottom:10px}
 .auth-form input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit;box-sizing:border-box}
+.auth-form .check-row{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.35}
+.auth-form .check-row input{width:auto;margin-top:2px}
 .flashes{background:var(--accent-soft);border:1px solid var(--border);border-radius:8px;padding:12px 16px;color:var(--text)}
 .notice{background:var(--accent-soft);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+
+.legal-main{max-width:860px;margin:28px auto;padding:0 18px;line-height:1.6}
+.legal-main h1{margin-bottom:4px}
+.legal-main h2{margin-top:24px;font-size:20px}
+.legal-main a, footer a, .auth-form a{color:var(--accent)}
 
 .admin-main{max-width:1100px;margin:24px auto;padding:0 18px}
 .admin-header{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap}

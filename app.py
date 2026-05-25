@@ -398,6 +398,7 @@ def signup():
     email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
     confirm_password = request.form.get("confirm_password", "")
+    agree_terms = request.form.get("agree_terms")
     if not email or "@" not in email:
         flash("Enter a valid email address.")
         return redirect(url_for("login"))
@@ -406,6 +407,9 @@ def signup():
         return redirect(url_for("login"))
     if password != confirm_password:
         flash("Passwords do not match.")
+        return redirect(url_for("login"))
+    if agree_terms != "on":
+        flash("You must agree to the Website Rules and Privacy Policy.")
         return redirect(url_for("login"))
 
     user = create_password_user(email, password)
@@ -431,6 +435,16 @@ def verify_email(token):
     db.commit()
     flash("Email verified. You can sign in now.")
     return redirect(url_for("login"))
+
+
+@app.route("/terms")
+def terms():
+    return render_template("terms.html")
+
+
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
 
 
 @app.route("/auth/google")

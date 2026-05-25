@@ -115,6 +115,24 @@ class SiteAuthAdminTests(unittest.TestCase):
             ).fetchone()
         self.assertIsNone(user)
 
+    def test_signup_requires_terms_agreement(self):
+        response = self.client.post(
+            "/signup",
+            data={
+                "email": "new@example.com",
+                "password": "secret123",
+                "confirm_password": "secret123",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            user = site.get_db().execute(
+                "SELECT * FROM users WHERE email = ?",
+                ("new@example.com",),
+            ).fetchone()
+        self.assertIsNone(user)
+
     def test_signup_creates_unverified_user_and_sends_email(self):
         sent = []
         with mock.patch.object(site, "send_verification_email", side_effect=lambda email, token: sent.append((email, token))):
@@ -124,6 +142,7 @@ class SiteAuthAdminTests(unittest.TestCase):
                     "email": "new@example.com",
                     "password": "secret123",
                     "confirm_password": "secret123",
+                    "agree_terms": "on",
                 },
             )
 
@@ -146,6 +165,7 @@ class SiteAuthAdminTests(unittest.TestCase):
                     "email": "new@example.com",
                     "password": "secret123",
                     "confirm_password": "secret123",
+                    "agree_terms": "on",
                 },
             )
         with site.app.app_context():
@@ -173,6 +193,7 @@ class SiteAuthAdminTests(unittest.TestCase):
                     "email": "new@example.com",
                     "password": "secret123",
                     "confirm_password": "secret123",
+                    "agree_terms": "on",
                 },
             )
 
@@ -184,6 +205,15 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         with self.client.session_transaction() as session:
             self.assertNotIn("user_id", session)
+
+    def test_legal_pages_render(self):
+        terms = self.client.get("/terms")
+        privacy = self.client.get("/privacy")
+
+        self.assertEqual(terms.status_code, 200)
+        self.assertEqual(privacy.status_code, 200)
+        self.assertIn(b"Website Rules", terms.data)
+        self.assertIn(b"Privacy Policy", privacy.data)
 
     def test_admin_can_upload_game_with_thumbnail(self):
         self.login()

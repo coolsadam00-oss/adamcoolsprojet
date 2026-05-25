@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Privacy Policy - {{ site_name }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  {% if ui_accent %}<style>:root{--accent:{{ ui_accent }};}</style>{% endif %}
+</head>
+<body>
+  <nav class="topbar">
+    <div class="brand">{{ site_name }}</div>
+    <div class="actions"><a class="btn" href="/">Back</a></div>
+  </nav>
+  <main class="legal-main">
+    <h1>Privacy Policy</h1>
+    <p class="muted">Last updated: May 25, 2026</p>
+    <p>This policy explains what {{ site_name }} collects and how it is used.</p>
+
+    <h2>Information We Collect</h2>
+    <p>If you create an account, we collect your email address, password hash, verification status, and login information needed to keep you signed in. If you use Google sign-in, we may receive your email address, display name, and profile picture from Google.</p>
+    <p>If an admin uploads a game, we store the game title, description, tags, thumbnail, uploaded files, and upload time.</p>
+
+    <h2>How We Use Information</h2>
+    <p>We use account information to sign you in, verify your email, show admin access, protect the site, and contact you about your account or uploaded content.</p>
+
+    <h2>Email Verification</h2>
+    <p>When you sign up with email and password, we send a verification link to the email address you entered. If email sending is not configured, the verification link may appear in server logs for setup testing.</p>
+
+    <h2>Cookies</h2>
+    <p>The site uses a session cookie to keep you signed in. Your browser may also store theme preferences.</p>
+
+    <h2>Children</h2>
+    <p>This site is not for children under 13. Do not create an account if you are under 13. If the site owner learns that an account belongs to a child under 13, the account may be removed.</p>
+
+    <h2>Sharing</h2>
+    <p>We do not sell personal information. We may share information if needed to run the site, follow the law, respond to a valid complaint, or protect the site and its users.</p>
+
+    <h2>Your Choices</h2>
+    <p>You can browse games as a guest. To request account deletion or removal of uploaded content, contact the site owner.</p>
+
+    <h2>Security</h2>
+    <p>Passwords are stored as hashes. No website can promise perfect security, so use a strong password that you do not reuse elsewhere.</p>
+  </main>
+</body>
+</html>

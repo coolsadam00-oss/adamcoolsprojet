@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Website Rules - {{ site_name }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  {% if ui_accent %}<style>:root{--accent:{{ ui_accent }};}</style>{% endif %}
+</head>
+<body>
+  <nav class="topbar">
+    <div class="brand">{{ site_name }}</div>
+    <div class="actions"><a class="btn" href="/">Back</a></div>
+  </nav>
+  <main class="legal-main">
+    <h1>Website Rules</h1>
+    <p class="muted">Last updated: May 25, 2026</p>
+    <p>These rules apply when you use {{ site_name }}. If you do not agree, do not create an account or upload games.</p>
+
+    <h2>Accounts</h2>
+    <p>You are responsible for your account and password. Use a real email address so you can verify your account and receive important messages about your account or uploads.</p>
+
+    <h2>Age</h2>
+    <p>You must be at least 13 years old to create an account. If you are under 13, do not create an account or send personal information through this site.</p>
+
+    <h2>Uploads</h2>
+    <p>Only admins may upload games. By uploading a game, you promise that you own it or have permission to share it. Do not upload copyrighted games, stolen code, malware, scams, hateful content, sexual content, or anything that invades another person's privacy.</p>
+
+    <h2>Moderation</h2>
+    <p>Admins may remove games, thumbnails, accounts, or access if content breaks these rules or creates a safety, legal, or security risk.</p>
+
+    <h2>Copyright</h2>
+    <p>If you believe something on the site uses your copyrighted work without permission, contact the site owner with the game title, the URL, your contact email, and a short explanation of the issue.</p>
+
+    <h2>No Guarantees</h2>
+    <p>The site is provided as-is. Games are uploaded by users or admins, and the site owner is not responsible for damage caused by uploaded content. Do not use the site for anything important or unsafe.</p>
+
+    <h2>Changes</h2>
+    <p>These rules may change. Continued use of the site means you accept the updated rules.</p>
+  </main>
+</body>
+</html>
