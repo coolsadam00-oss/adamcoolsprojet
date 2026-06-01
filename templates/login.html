@@ -32,8 +32,9 @@
           <h2>Sign in</h2>
           <p class="form-note">Use this after your email is verified.</p>
           <input type="hidden" name="next" value="{{ next_url }}">
-          <label>Email<input name="email" type="email" autocomplete="email" required></label>
+          <label>Email or admin login<input name="email" type="text" autocomplete="username" required></label>
           <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+          <label class="check-row"><input name="remember_device" type="checkbox"> Remember this device</label>
           <button type="submit">Sign in</button>
         </form>
         <form method="post" action="/signup" class="auth-form">

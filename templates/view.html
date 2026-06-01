@@ -16,7 +16,11 @@
       {% if is_admin %}<a class="btn" href="/admin">Admin</a>{% endif %}
       {% if current_user %}
         <a class="profile-chip" href="/account" aria-label="Open account">
-          <span class="profile-avatar">{{ display_name[:1]|upper }}</span>
+          {% if current_user.picture %}
+            <img class="profile-avatar-img" src="{{ current_user.picture }}" alt="">
+          {% else %}
+            <span class="profile-avatar">{{ display_name[:1]|upper }}</span>
+          {% endif %}
           <span class="profile-name">{{ display_name }}</span>
         </a>
         <form method="post" action="/logout" class="inline-form"><button type="submit">Sign out</button></form>
@@ -31,6 +35,39 @@
     <div class="view-header">
       <h1>{{ project.title }}</h1>
       <p class="muted">{{ project.description }}</p>
+      <section class="rating-panel" aria-label="Game rating">
+        <div>
+          <span class="rating-stars">★</span>
+          {% if project.rating_count %}
+            <strong>{{ "%.1f"|format(project.avg_rating) }}</strong>
+            <span class="muted">{{ project.rating_count }} rating{% if project.rating_count != 1 %}s{% endif %}</span>
+          {% else %}
+            <span class="muted">No ratings yet</span>
+          {% endif %}
+        </div>
+        {% if current_user %}
+          <form method="post" action="/project/{{ project.id }}/rate" class="rating-form">
+            <label for="score">Your rating</label>
+            <select id="score" name="score">
+              {% for score in range(1, 6) %}
+                <option value="{{ score }}" {% if user_rating == score %}selected{% endif %}>{{ score }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit">Rate</button>
+          </form>
+        {% else %}
+          <a class="btn small" href="/login?next=/project/{{ project.id }}">Sign in to rate</a>
+        {% endif %}
+      </section>
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <ul class="flashes">
+          {% for m in messages %}
+            <li>{{ m }}</li>
+          {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
     </div>
     {% if index_file %}
       <p><a class="btn small" href="/project_files/{{ project.id }}/{{ index_file }}" target="_blank">Open in new tab</a></p>

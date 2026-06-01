@@ -67,6 +67,25 @@
     </section>
 
     <section class="admin-section">
+      <h2>Profile pictures</h2>
+      <form method="post" action="/admin/avatars" class="avatar-admin-form">
+        <input name="label" placeholder="Name" maxlength="80" required>
+        <input name="image_url" placeholder="https://example.com/avatar.png" maxlength="500" required>
+        <button type="submit">Add picture</button>
+      </form>
+      <div class="avatar-admin-list">
+        {% for avatar in avatars %}
+          <div class="avatar-admin-item">
+            <img class="profile-avatar-img" src="{{ avatar.image_url }}" alt="">
+            <span>{{ avatar.label }}</span>
+          </div>
+        {% else %}
+          <p class="empty">No profile pictures yet.</p>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="admin-section">
       <h2>Users</h2>
       <div class="admin-list">
         {% for u in users %}

@@ -55,8 +55,14 @@ app.config["PREFERRED_URL_SCHEME"] = os.environ.get("PREFERRED_URL_SCHEME", "htt
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("COOKIE_SECURE", "0") == "1"
+app.permanent_session_lifetime = datetime.timedelta(days=30)
 
 ADMIN_EMAIL = "coolsadam00@gmail.com"
+ADMIN_LOGIN = "ADMINADAM2155"
+PREMADE_ACCOUNT_PASSWORD = "Brosky2155"
+DEFAULT_AVATARS = (
+    ("Blue Bolt", "/static/site-icon.svg"),
+)
 THUMBNAIL_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
 
@@ -117,6 +123,29 @@ def init_db():
         db.execute("ALTER TABLE users ADD COLUMN verification_token TEXT")
     db.execute(
         """
+        CREATE TABLE IF NOT EXISTS ratings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            score INTEGER NOT NULL,
+            created_at TEXT,
+            updated_at TEXT,
+            UNIQUE(project_id, user_id)
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS avatar_options (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            label TEXT NOT NULL,
+            image_url TEXT UNIQUE NOT NULL,
+            created_at TEXT
+        )
+        """
+    )
+    db.execute(
+        """
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -128,7 +157,49 @@ def init_db():
     }
     if "thumbnail" not in columns:
         db.execute("ALTER TABLE projects ADD COLUMN thumbnail TEXT")
+    seed_default_avatars(db)
+    seed_premade_account(db)
     db.commit()
+
+
+def seed_default_avatars(db):
+    now = datetime.datetime.now(datetime.UTC).isoformat()
+    for label, image_url in DEFAULT_AVATARS:
+        db.execute(
+            "INSERT OR IGNORE INTO avatar_options (label, image_url, created_at) "
+            "VALUES (?, ?, ?)",
+            (label, image_url, now),
+        )
+
+
+def seed_premade_account(db):
+    now = datetime.datetime.now(datetime.UTC).isoformat()
+    password_hash = generate_password_hash(PREMADE_ACCOUNT_PASSWORD)
+    existing = db.execute(
+        "SELECT id FROM users WHERE email = ?",
+        (ADMIN_EMAIL,),
+    ).fetchone()
+    if existing:
+        db.execute(
+            "UPDATE users SET name = COALESCE(NULLIF(name, ''), ?), "
+            "is_admin = 1, password_hash = ?, email_verified = 1, "
+            "verification_token = NULL WHERE id = ?",
+            (ADMIN_EMAIL.split("@")[0], password_hash, existing["id"]),
+        )
+        return
+    db.execute(
+        "INSERT INTO users (email, name, picture, is_admin, created_at, last_login, "
+        "password_hash, email_verified, verification_token) "
+        "VALUES (?, ?, ?, 1, ?, ?, ?, 1, NULL)",
+        (
+            ADMIN_EMAIL,
+            ADMIN_EMAIL.split("@")[0],
+            "",
+            now,
+            now,
+            password_hash,
+        ),
+    )
 
 
 @app.teardown_appcontext
@@ -241,6 +312,18 @@ def safe_next_url(value):
     return url_for("index")
 
 
+def clean_image_url(value):
+    value = value.strip()
+    if not value:
+        return ""
+    parsed = urllib.parse.urlparse(value)
+    if value.startswith("/static/"):
+        return value[:500]
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Image must be a full http/https URL or a /static/ path.")
+    return value[:500]
+
+
 def create_password_user(email, password):
     email = email.strip().lower()
     token = secrets.token_urlsafe(32)
@@ -294,9 +377,16 @@ def send_verification_email(email, token):
 
 
 def authenticate_password_user(email, password):
-    user = get_db().execute(
+    db = get_db()
+    email = email.strip().lower()
+    if email == ADMIN_LOGIN.lower():
+        email = ADMIN_EMAIL
+    if email == ADMIN_EMAIL:
+        seed_premade_account(db)
+        db.commit()
+    user = db.execute(
         "SELECT * FROM users WHERE email = ?",
-        (email.strip().lower(),),
+        (email,),
     ).fetchone()
     if not user or not user["password_hash"]:
         return None, "Email or password is wrong."
@@ -380,15 +470,24 @@ def index():
     if q:
         like = f"%{q}%"
         rows = db.execute(
-            "SELECT * FROM projects WHERE title LIKE ? OR description LIKE ? OR tags LIKE ? ORDER BY id DESC",
+            "SELECT p.*, AVG(r.score) AS avg_rating, COUNT(r.id) AS rating_count "
+            "FROM projects p LEFT JOIN ratings r ON r.project_id = p.id "
+            "WHERE p.title LIKE ? OR p.description LIKE ? OR p.tags LIKE ? "
+            "GROUP BY p.id ORDER BY p.id DESC",
             (like, like, like),
         ).fetchall()
     else:
-        rows = db.execute("SELECT * FROM projects ORDER BY id DESC").fetchall()
+        rows = db.execute(
+            "SELECT p.*, AVG(r.score) AS avg_rating, COUNT(r.id) AS rating_count "
+            "FROM projects p LEFT JOIN ratings r ON r.project_id = p.id "
+            "GROUP BY p.id ORDER BY p.id DESC"
+        ).fetchall()
     if q:
         users = db.execute(
-            "SELECT id, name FROM users WHERE email_verified = 1 AND name LIKE ? ORDER BY name LIMIT 12",
-            (like,),
+            "SELECT id, name, email, picture FROM users "
+            "WHERE email_verified = 1 AND (name LIKE ? OR email LIKE ?) "
+            "ORDER BY name LIMIT 12",
+            (like, like),
         ).fetchall()
     else:
         users = []
@@ -407,6 +506,7 @@ def login():
             flash(error)
             return redirect(url_for("login"))
         session.clear()
+        session.permanent = request.form.get("remember_device") == "on"
         session["user_id"] = user["id"]
         return redirect(safe_next_url(request.form.get("next")))
 
@@ -564,7 +664,10 @@ def logout():
 @app.route("/account")
 @login_required
 def account():
-    return render_template("account.html")
+    avatars = get_db().execute(
+        "SELECT * FROM avatar_options ORDER BY id",
+    ).fetchall()
+    return render_template("account.html", avatars=avatars)
 
 
 @app.route("/account/profile", methods=["POST"])
@@ -577,13 +680,27 @@ def update_profile():
     if not re.fullmatch(r"[A-Za-z0-9 _.-]+", username):
         flash("Username can use letters, numbers, spaces, dots, dashes, and underscores.")
         return redirect(url_for("account"))
+    picture = current_user()["picture"] or ""
+    avatar_id = request.form.get("avatar_id")
+    if avatar_id is not None:
+        if avatar_id == "":
+            picture = ""
+        else:
+            avatar = get_db().execute(
+                "SELECT image_url FROM avatar_options WHERE id = ?",
+                (avatar_id,),
+            ).fetchone()
+            if not avatar:
+                flash("Choose one of the profile pictures from the website.")
+                return redirect(url_for("account"))
+            picture = avatar["image_url"]
     get_db().execute(
-        "UPDATE users SET name = ? WHERE id = ?",
-        (username, current_user()["id"]),
+        "UPDATE users SET name = ?, picture = ? WHERE id = ?",
+        (username, picture, current_user()["id"]),
     )
     get_db().commit()
     g.current_user = None
-    flash("Username saved.")
+    flash("Profile saved.")
     return redirect(url_for("account"))
 
 
@@ -659,10 +776,23 @@ def upload():
 @app.route("/project/<int:pid>")
 def view_project(pid):
     db = get_db()
-    row = db.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+    row = db.execute(
+        "SELECT p.*, AVG(r.score) AS avg_rating, COUNT(r.id) AS rating_count "
+        "FROM projects p LEFT JOIN ratings r ON r.project_id = p.id "
+        "WHERE p.id = ? GROUP BY p.id",
+        (pid,),
+    ).fetchone()
     if not row:
         abort(404)
     project = dict(row)
+    user_rating = None
+    if current_user():
+        rating = db.execute(
+            "SELECT score FROM ratings WHERE project_id = ? AND user_id = ?",
+            (pid, current_user()["id"]),
+        ).fetchone()
+        if rating:
+            user_rating = rating["score"]
 
     # find index.html inside folder
     folder = os.path.join(PROJECTS_DIR, str(pid))
@@ -677,7 +807,39 @@ def view_project(pid):
         if found:
             break
 
-    return render_template("view.html", project=project, index_file=found)
+    return render_template(
+        "view.html",
+        project=project,
+        index_file=found,
+        user_rating=user_rating,
+    )
+
+
+@app.route("/project/<int:pid>/rate", methods=["POST"])
+@login_required
+def rate_project(pid):
+    db = get_db()
+    project = db.execute("SELECT id FROM projects WHERE id = ?", (pid,)).fetchone()
+    if not project:
+        abort(404)
+    try:
+        score = int(request.form.get("score", ""))
+    except ValueError:
+        score = 0
+    if score < 1 or score > 5:
+        flash("Choose a rating from 1 to 5.")
+        return redirect(url_for("view_project", pid=pid))
+    now = datetime.datetime.now(datetime.UTC).isoformat()
+    db.execute(
+        "INSERT INTO ratings (project_id, user_id, score, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT(project_id, user_id) DO UPDATE SET "
+        "score = excluded.score, updated_at = excluded.updated_at",
+        (pid, current_user()["id"], score, now, now),
+    )
+    db.commit()
+    flash("Rating saved.")
+    return redirect(url_for("view_project", pid=pid))
 
 
 @app.route("/project_files/<int:pid>/<path:filename>")
@@ -709,7 +871,15 @@ def admin_panel():
     else:
         projects = db.execute("SELECT * FROM projects ORDER BY id DESC").fetchall()
         users = db.execute("SELECT * FROM users ORDER BY last_login DESC").fetchall()
-    return render_template("admin.html", projects=projects, users=users, q=q, lulu_message=None)
+    avatars = db.execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall()
+    return render_template(
+        "admin.html",
+        projects=projects,
+        users=users,
+        avatars=avatars,
+        q=q,
+        lulu_message=None,
+    )
 
 
 @app.route("/admin/projects/<int:pid>/delete", methods=["POST"])
@@ -738,6 +908,31 @@ def make_admin(user_id):
     return redirect(url_for("admin_panel"))
 
 
+@app.route("/admin/avatars", methods=["POST"])
+@admin_required
+def add_avatar():
+    label = " ".join(request.form.get("label", "").split())[:80]
+    try:
+        image_url = clean_image_url(request.form.get("image_url", ""))
+    except ValueError as error:
+        flash(str(error))
+        return redirect(url_for("admin_panel"))
+    if not label:
+        flash("Avatar needs a name.")
+        return redirect(url_for("admin_panel"))
+    if not image_url:
+        flash("Avatar needs an image URL.")
+        return redirect(url_for("admin_panel"))
+    get_db().execute(
+        "INSERT OR IGNORE INTO avatar_options (label, image_url, created_at) "
+        "VALUES (?, ?, ?)",
+        (label, image_url, datetime.datetime.now(datetime.UTC).isoformat()),
+    )
+    get_db().commit()
+    flash("Profile picture added.")
+    return redirect(url_for("admin_panel"))
+
+
 @app.route("/admin/lulu", methods=["POST"])
 @admin_required
 def lulu():
@@ -747,6 +942,7 @@ def lulu():
             "admin.html",
             projects=get_db().execute("SELECT * FROM projects ORDER BY id DESC").fetchall(),
             users=get_db().execute("SELECT * FROM users ORDER BY last_login DESC").fetchall(),
+            avatars=get_db().execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall(),
             q="",
             lulu_message=error,
         ), 400
@@ -754,6 +950,7 @@ def lulu():
         "admin.html",
         projects=get_db().execute("SELECT * FROM projects ORDER BY id DESC").fetchall(),
         users=get_db().execute("SELECT * FROM users ORDER BY last_login DESC").fetchall(),
+        avatars=get_db().execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall(),
         q="",
         lulu_message=message,
     )

@@ -74,6 +74,56 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(user["email"], ADMIN_EMAIL)
         self.assertEqual(user["is_admin"], 1)
 
+    def test_premade_admin_account_can_sign_in(self):
+        response = self.client.post(
+            "/login",
+            data={"email": "ADMINADAM2155", "password": "Brosky2155"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.client.session_transaction() as session:
+            self.assertIn("user_id", session)
+        with site.app.app_context():
+            user = site.get_db().execute(
+                "SELECT * FROM users WHERE id = ?",
+                (session["user_id"],),
+            ).fetchone()
+        self.assertEqual(user["email"], ADMIN_EMAIL)
+        self.assertEqual(user["is_admin"], 1)
+        self.assertEqual(user["email_verified"], 1)
+
+    def test_login_page_accepts_admin_login_name(self):
+        response = self.client.get("/login")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'name="email" type="text"', response.data)
+
+    def test_premade_admin_login_repairs_existing_bad_account_state(self):
+        with site.app.app_context():
+            db = site.get_db()
+            db.execute(
+                "UPDATE users SET password_hash = ?, email_verified = 0, "
+                "is_admin = 0 WHERE email = ?",
+                ("broken-password", ADMIN_EMAIL),
+            )
+            db.commit()
+
+        response = self.client.post(
+            "/login",
+            data={"email": ADMIN_EMAIL, "password": "Brosky2155"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.client.session_transaction() as session:
+            self.assertIn("user_id", session)
+        with site.app.app_context():
+            user = site.get_db().execute(
+                "SELECT * FROM users WHERE email = ?",
+                (ADMIN_EMAIL,),
+            ).fetchone()
+        self.assertEqual(user["is_admin"], 1)
+        self.assertEqual(user["email_verified"], 1)
+
     def test_upload_requires_admin(self):
         self.login("player@example.com", "Player")
 
@@ -185,6 +235,20 @@ class SiteAuthAdminTests(unittest.TestCase):
         with self.client.session_transaction() as session:
             self.assertIn("user_id", session)
 
+    def test_remember_device_makes_login_session_permanent(self):
+        response = self.client.post(
+            "/login",
+            data={
+                "email": ADMIN_EMAIL,
+                "password": "Brosky2155",
+                "remember_device": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.client.session_transaction() as session:
+            self.assertTrue(session["_permanent"])
+
     def test_unverified_user_cannot_password_login(self):
         with mock.patch.object(site, "send_verification_email"):
             self.client.post(
@@ -271,6 +335,50 @@ class SiteAuthAdminTests(unittest.TestCase):
             ).fetchone()
         self.assertEqual(user["name"], "Cool Player")
 
+    def test_signed_in_user_can_choose_offered_profile_picture(self):
+        user_id = self.login("player@example.com", "Player")
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO avatar_options (label, image_url, created_at) "
+                "VALUES (?, ?, ?)",
+                ("Blue Bolt", "/static/test-avatar.png", "now"),
+            )
+            db.commit()
+            avatar_id = cur.lastrowid
+
+        response = self.client.post(
+            "/account/profile",
+            data={
+                "username": "Cool Player",
+                "avatar_id": str(avatar_id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            user = site.get_db().execute(
+                "SELECT picture FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+        self.assertEqual(user["picture"], "/static/test-avatar.png")
+
+    def test_user_cannot_choose_unlisted_profile_picture(self):
+        user_id = self.login("player@example.com", "Player")
+
+        response = self.client.post(
+            "/account/profile",
+            data={"username": "Cool Player", "avatar_id": "999"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            user = site.get_db().execute(
+                "SELECT picture FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+        self.assertEqual(user["picture"], "")
+
     def test_home_search_finds_public_usernames(self):
         with site.app.app_context():
             site.upsert_user("searchable@example.com", "Cool Player")
@@ -280,6 +388,45 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Players", response.data)
         self.assertIn(b"Cool Player", response.data)
+
+    def test_home_search_finds_public_emails(self):
+        with site.app.app_context():
+            site.upsert_user("searchable@example.com", "Cool Player")
+
+        response = self.client.get("/?q=searchable@example.com")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Players", response.data)
+        self.assertIn(b"searchable@example.com", response.data)
+
+    def test_signed_in_user_can_rate_game(self):
+        user_id = self.login("player@example.com", "Player")
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Rate Me", "", "", "1", "now"),
+            )
+            db.commit()
+            project_id = cur.lastrowid
+
+        response = self.client.post(
+            f"/project/{project_id}/rate",
+            data={"score": "5"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            rating = site.get_db().execute(
+                "SELECT score FROM ratings WHERE project_id = ? AND user_id = ?",
+                (project_id, user_id),
+            ).fetchone()
+        self.assertEqual(rating["score"], 5)
+
+        page = self.client.get(f"/project/{project_id}")
+        self.assertIn(b"5.0", page.data)
+        self.assertIn(b"Your rating", page.data)
 
     def test_legal_pages_render(self):
         terms = self.client.get("/terms")
@@ -347,6 +494,25 @@ class SiteAuthAdminTests(unittest.TestCase):
                 (user["id"],),
             ).fetchone()
         self.assertEqual(row["is_admin"], 1)
+
+    def test_admin_can_add_profile_picture_option(self):
+        self.login()
+
+        response = self.client.post(
+            "/admin/avatars",
+            data={
+                "label": "Fire Mode",
+                "image_url": "https://example.com/fire.png",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            avatar = site.get_db().execute(
+                "SELECT * FROM avatar_options WHERE label = ?",
+                ("Fire Mode",),
+            ).fetchone()
+        self.assertEqual(avatar["image_url"], "https://example.com/fire.png")
 
     def test_lulu_can_change_site_name_but_rejects_code_changes(self):
         self.login()

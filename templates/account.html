@@ -32,9 +32,35 @@
       {% endwith %}
       <form method="post" action="/account/profile" class="profile-form">
         <h2>Public profile</h2>
-        <p class="muted">This username can be found with website search.</p>
+        <p class="muted">Your username and email can be found with website search.</p>
+        <div class="profile-preview">
+          {% if current_user.picture %}
+            <img class="profile-avatar-img large" src="{{ current_user.picture }}" alt="">
+          {% else %}
+            <span class="profile-avatar large">{{ display_name[:1]|upper }}</span>
+          {% endif %}
+          <div>
+            <strong>{{ display_name }}</strong>
+            <span>{{ current_user.email }}</span>
+          </div>
+        </div>
         <label>Username<input name="username" maxlength="32" value="{{ display_name }}" required></label>
-        <button type="submit">Save username</button>
+        <fieldset class="avatar-picker">
+          <legend>Profile picture</legend>
+          <label class="avatar-choice">
+            <input type="radio" name="avatar_id" value="" {% if not current_user.picture %}checked{% endif %}>
+            <span class="profile-avatar">{{ display_name[:1]|upper }}</span>
+            <strong>No picture</strong>
+          </label>
+          {% for avatar in avatars %}
+            <label class="avatar-choice">
+              <input type="radio" name="avatar_id" value="{{ avatar.id }}" {% if current_user.picture == avatar.image_url %}checked{% endif %}>
+              <img class="profile-avatar-img" src="{{ avatar.image_url }}" alt="">
+              <strong>{{ avatar.label }}</strong>
+            </label>
+          {% endfor %}
+        </fieldset>
+        <button type="submit">Save profile</button>
       </form>
       <form method="post" action="/account/delete" class="danger-zone">
         <h2>Delete account</h2>

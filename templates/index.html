@@ -13,7 +13,7 @@
     <a class="brand brand-lockup" href="/"><img src="/static/site-icon.svg" alt=""> <span>{{ site_name }}</span></a>
     <div class="search">
       <form method="get" action="/">
-        <input name="q" placeholder="Search games, tags, description..." value="{{ q|e }}" />
+        <input name="q" placeholder="Search games, players, emails..." value="{{ q|e }}" />
         <button type="submit">Search</button>
       </form>
     </div>
@@ -24,7 +24,11 @@
       {% endif %}
       {% if current_user %}
         <a class="profile-chip" href="/account" aria-label="Open account">
-          <span class="profile-avatar">{{ display_name[:1]|upper }}</span>
+          {% if current_user.picture %}
+            <img class="profile-avatar-img" src="{{ current_user.picture }}" alt="">
+          {% else %}
+            <span class="profile-avatar">{{ display_name[:1]|upper }}</span>
+          {% endif %}
           <span class="profile-name">{{ display_name }}</span>
         </a>
         <form method="post" action="/logout" class="inline-form"><button type="submit">Sign out</button></form>
@@ -47,8 +51,15 @@
         <div class="people-list">
           {% for u in users %}
             <div class="person-pill">
-              <span class="profile-avatar">{{ (u.name or '?')[:1]|upper }}</span>
-              <span>{{ u.name }}</span>
+              {% if u.picture %}
+                <img class="profile-avatar-img" src="{{ u.picture }}" alt="">
+              {% else %}
+                <span class="profile-avatar">{{ (u.name or u.email or '?')[:1]|upper }}</span>
+              {% endif %}
+              <span>
+                <strong>{{ u.name or u.email.split('@')[0] }}</strong>
+                <small>{{ u.email }}</small>
+              </span>
             </div>
           {% endfor %}
         </div>
@@ -74,6 +85,15 @@
           </div>
         </div>
         <p class="desc">{{ p.description }}</p>
+        <div class="rating-summary" aria-label="Game rating">
+          <span class="rating-stars">★</span>
+          {% if p.rating_count %}
+            <strong>{{ "%.1f"|format(p.avg_rating) }}</strong>
+            <span>{{ p.rating_count }} rating{% if p.rating_count != 1 %}s{% endif %}</span>
+          {% else %}
+            <span>Not rated yet</span>
+          {% endif %}
+        </div>
         <div class="card-actions">
           <a class="view" href="/project/{{ p.id }}">Play / View</a>
         </div>
