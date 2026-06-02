@@ -98,6 +98,20 @@ button.danger{background:var(--danger)}
 .iframe-wrap{max-width:980px;margin:8px auto}
 .iframe-wrap iframe{width:100%;height:min(80vh,760px);border:1px solid var(--border);border-radius:8px;background:var(--surface)}
 .btn.small{padding:6px 10px;font-size:13px}
+button.small{padding:6px 10px;font-size:13px}
+.comments-panel{max-width:980px;margin:20px auto 0;padding:16px;border:1px solid var(--border);border-radius:8px;background:var(--card)}
+.comments-panel h2{margin:0 0 12px;font-size:20px}
+.comment-form{display:grid;gap:8px;margin-bottom:16px}
+.comment-form label{font-size:13px;color:var(--muted)}
+.comment-form textarea{width:100%;min-height:90px;resize:vertical;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
+.comment-form button{justify-self:start}
+.comments-list{display:grid;gap:10px}
+.comment{padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+.comment-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.comment-author{display:flex;align-items:center;gap:8px;min-width:0}
+.comment-author span:last-child{display:grid;gap:1px}
+.comment-author small{color:var(--muted);font-size:12px}
+.comment p{margin:10px 0 0;line-height:1.5;overflow-wrap:anywhere}
 
 .auth-main{min-height:100vh;display:grid;place-items:center;padding:28px;background:radial-gradient(circle at top left, var(--accent-soft), transparent 34%),var(--bg)}
 .auth-shell{width:min(1040px,100%);display:grid;grid-template-columns:minmax(260px,0.9fr) minmax(320px,1.1fr);gap:28px;align-items:start}

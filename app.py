@@ -142,6 +142,17 @@ def init_db():
     )
     db.execute(
         """
+        CREATE TABLE IF NOT EXISTS comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            body TEXT NOT NULL,
+            created_at TEXT
+        )
+        """
+    )
+    db.execute(
+        """
         CREATE TABLE IF NOT EXISTS avatar_options (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             label TEXT NOT NULL,
@@ -806,6 +817,12 @@ def view_project(pid):
         ).fetchone()
         if rating:
             user_rating = rating["score"]
+    comments = db.execute(
+        "SELECT c.*, u.name, u.email, u.picture, u.is_admin "
+        "FROM comments c JOIN users u ON u.id = c.user_id "
+        "WHERE c.project_id = ? ORDER BY c.id DESC",
+        (pid,),
+    ).fetchall()
 
     # find index.html inside folder
     folder = os.path.join(PROJECTS_DIR, str(pid))
@@ -825,6 +842,7 @@ def view_project(pid):
         project=project,
         index_file=found,
         user_rating=user_rating,
+        comments=comments,
     )
 
 
@@ -853,6 +871,50 @@ def rate_project(pid):
     db.commit()
     flash("Rating saved.")
     return redirect(url_for("view_project", pid=pid))
+
+
+@app.route("/project/<int:pid>/comments", methods=["POST"])
+@login_required
+def add_comment(pid):
+    db = get_db()
+    project = db.execute("SELECT id FROM projects WHERE id = ?", (pid,)).fetchone()
+    if not project:
+        abort(404)
+    body = request.form.get("body", "").strip()
+    if not body:
+        flash("Write a comment before posting.")
+        return redirect(url_for("view_project", pid=pid))
+    body = body[:1000]
+    db.execute(
+        "INSERT INTO comments (project_id, user_id, body, created_at) "
+        "VALUES (?, ?, ?, ?)",
+        (
+            pid,
+            current_user()["id"],
+            body,
+            datetime.datetime.now(datetime.UTC).isoformat(),
+        ),
+    )
+    db.commit()
+    flash("Comment posted.")
+    return redirect(url_for("view_project", pid=pid))
+
+
+@app.route("/comments/<int:comment_id>/delete", methods=["POST"])
+@admin_required
+def delete_comment(comment_id):
+    db = get_db()
+    comment = db.execute(
+        "SELECT * FROM comments WHERE id = ?",
+        (comment_id,),
+    ).fetchone()
+    if not comment:
+        abort(404)
+    project_id = comment["project_id"]
+    db.execute("DELETE FROM comments WHERE id = ?", (comment_id,))
+    db.commit()
+    flash("Comment deleted.")
+    return redirect(url_for("view_project", pid=project_id))
 
 
 @app.route("/project_files/<int:pid>/<path:filename>")

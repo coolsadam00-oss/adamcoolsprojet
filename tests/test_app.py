@@ -490,6 +490,120 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertIn(b"5.0", page.data)
         self.assertIn(b"Your rating", page.data)
 
+    def test_signed_in_user_can_comment_on_game(self):
+        user_id = self.login("player@example.com", "Player")
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Comment Game", "", "", "1", "now"),
+            )
+            db.commit()
+            project_id = cur.lastrowid
+
+        response = self.client.post(
+            f"/project/{project_id}/comments",
+            data={"body": "This game is fun"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            comment = site.get_db().execute(
+                "SELECT body, user_id FROM comments WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+        self.assertEqual(comment["body"], "This game is fun")
+        self.assertEqual(comment["user_id"], user_id)
+
+        page = self.client.get(f"/project/{project_id}")
+        self.assertIn(b"Comments", page.data)
+        self.assertIn(b"This game is fun", page.data)
+        self.assertIn(b"Player", page.data)
+
+    def test_guest_cannot_comment_on_game(self):
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Comment Game", "", "", "1", "now"),
+            )
+            db.commit()
+            project_id = cur.lastrowid
+
+        response = self.client.post(
+            f"/project/{project_id}/comments",
+            data={"body": "Guest note"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login", response.headers["Location"])
+        with site.app.app_context():
+            count = site.get_db().execute(
+                "SELECT COUNT(*) FROM comments WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_admin_can_delete_game_comment(self):
+        self.login()
+        with site.app.app_context():
+            user = site.upsert_user("player@example.com", "Player")
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Comment Game", "", "", "1", "now"),
+            )
+            project_id = cur.lastrowid
+            comment = db.execute(
+                "INSERT INTO comments (project_id, user_id, body, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (project_id, user["id"], "Please remove", "now"),
+            )
+            db.commit()
+            comment_id = comment.lastrowid
+
+        response = self.client.post(f"/comments/{comment_id}/delete")
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            comment = site.get_db().execute(
+                "SELECT * FROM comments WHERE id = ?",
+                (comment_id,),
+            ).fetchone()
+        self.assertIsNone(comment)
+
+    def test_regular_user_cannot_delete_game_comment(self):
+        self.login("player@example.com", "Player")
+        with site.app.app_context():
+            admin = site.upsert_user(ADMIN_EMAIL, "Adam")
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Comment Game", "", "", "1", "now"),
+            )
+            project_id = cur.lastrowid
+            comment = db.execute(
+                "INSERT INTO comments (project_id, user_id, body, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (project_id, admin["id"], "Keep this", "now"),
+            )
+            db.commit()
+            comment_id = comment.lastrowid
+
+        response = self.client.post(f"/comments/{comment_id}/delete")
+
+        self.assertEqual(response.status_code, 403)
+        with site.app.app_context():
+            comment = site.get_db().execute(
+                "SELECT * FROM comments WHERE id = ?",
+                (comment_id,),
+            ).fetchone()
+        self.assertIsNotNone(comment)
+
     def test_legal_pages_render(self):
         terms = self.client.get("/terms")
         privacy = self.client.get("/privacy")

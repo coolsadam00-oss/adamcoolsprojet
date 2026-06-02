@@ -75,6 +75,47 @@
     {% else %}
       <p>No index.html found in this project. You can browse files <a href="/project_files/{{ project.id }}/">here</a>.</p>
     {% endif %}
+
+    <section class="comments-panel" aria-label="Game comments">
+      <h2>Comments</h2>
+      {% if current_user %}
+        <form method="post" action="/project/{{ project.id }}/comments" class="comment-form">
+          <label for="comment-body">Add a comment</label>
+          <textarea id="comment-body" name="body" maxlength="1000" required></textarea>
+          <button type="submit">Post comment</button>
+        </form>
+      {% else %}
+        <a class="btn small" href="/login?next=/project/{{ project.id }}">Sign in to comment</a>
+      {% endif %}
+
+      <div class="comments-list">
+        {% for comment in comments %}
+          <article class="comment">
+            <div class="comment-head">
+              <div class="comment-author">
+                {% if comment.picture %}
+                  <img class="profile-avatar-img" src="{{ comment.picture }}" alt="">
+                {% else %}
+                  <span class="profile-avatar">{{ (comment.name or comment.email or '?')[:1]|upper }}</span>
+                {% endif %}
+                <span>
+                  <strong>{{ comment.name or comment.email.split('@')[0] }}</strong>
+                  <small>{% if comment.is_admin %}Admin{% else %}Regular player{% endif %}</small>
+                </span>
+              </div>
+              {% if is_admin %}
+                <form method="post" action="/comments/{{ comment.id }}/delete">
+                  <button class="danger small" type="submit">Delete</button>
+                </form>
+              {% endif %}
+            </div>
+            <p>{{ comment.body }}</p>
+          </article>
+        {% else %}
+          <p class="empty">No comments yet.</p>
+        {% endfor %}
+      </div>
+    </section>
   </main>
   <script src="/static/theme.js"></script>
 </body>
