@@ -105,6 +105,25 @@
         {% endfor %}
       </div>
     </section>
+
+    <section class="admin-section">
+      <h2>Admin activity</h2>
+      <div class="admin-list">
+        {% for activity in activities %}
+          <article class="admin-row">
+            <div>
+              <strong>{{ activity.action.replace('_', ' ') }}</strong>
+              <p class="muted">
+                {{ activity.details }}
+                {% if activity.email %} - {{ activity.name or activity.email }}{% endif %}
+              </p>
+            </div>
+          </article>
+        {% else %}
+          <p class="empty">No admin activity yet.</p>
+        {% endfor %}
+      </div>
+    </section>
   </main>
   <script src="/static/theme.js"></script>
 </body>

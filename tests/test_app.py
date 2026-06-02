@@ -575,6 +575,38 @@ class SiteAuthAdminTests(unittest.TestCase):
             ).fetchone()
         self.assertIsNone(comment)
 
+    def test_admin_comment_deletion_is_saved_in_activity_log(self):
+        self.login()
+        with site.app.app_context():
+            user = site.upsert_user("player@example.com", "Player")
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Comment Game", "", "", "1", "now"),
+            )
+            project_id = cur.lastrowid
+            comment = db.execute(
+                "INSERT INTO comments (project_id, user_id, body, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (project_id, user["id"], "Please remove", "now"),
+            )
+            db.commit()
+            comment_id = comment.lastrowid
+
+        response = self.client.post(f"/comments/{comment_id}/delete")
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            activity = site.get_db().execute(
+                "SELECT action, target_type, target_id, details FROM admin_activity "
+                "ORDER BY id DESC LIMIT 1",
+            ).fetchone()
+        self.assertEqual(activity["action"], "delete_comment")
+        self.assertEqual(activity["target_type"], "comment")
+        self.assertEqual(activity["target_id"], comment_id)
+        self.assertIn("Comment Game", activity["details"])
+
     def test_regular_user_cannot_delete_game_comment(self):
         self.login("player@example.com", "Player")
         with site.app.app_context():
@@ -633,6 +665,83 @@ class SiteAuthAdminTests(unittest.TestCase):
             row = site.get_db().execute("SELECT * FROM projects").fetchone()
         self.assertEqual(row["title"], "Space Run")
         self.assertTrue(row["thumbnail"].endswith("thumbnail.png"))
+
+    def test_admin_upload_is_saved_in_activity_log(self):
+        self.login()
+
+        response = self.client.post(
+            "/upload",
+            data={
+                "title": "Activity Space",
+                "description": "Log this upload",
+                "tags": "activity",
+                "file": (self.make_zip(), "activity.zip"),
+            },
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            activity = site.get_db().execute(
+                "SELECT action, target_type, details FROM admin_activity "
+                "ORDER BY id DESC LIMIT 1",
+            ).fetchone()
+        self.assertEqual(activity["action"], "upload_project")
+        self.assertEqual(activity["target_type"], "project")
+        self.assertIn("Activity Space", activity["details"])
+
+    def test_saved_data_survives_app_setup_against_same_store(self):
+        with site.app.app_context():
+            user = site.upsert_user("persist@example.com", "Persist Player")
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Persistent Game", "", "", "1", "now"),
+            )
+            project_id = cur.lastrowid
+            folder = os.path.join(site.PROJECTS_DIR, str(project_id))
+            os.makedirs(folder, exist_ok=True)
+            with open(os.path.join(folder, "index.html"), "w", encoding="utf-8") as game_file:
+                game_file.write("<h1>Persistent Game</h1>")
+            db.execute(
+                "INSERT INTO comments (project_id, user_id, body, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (project_id, user["id"], "Still here", "now"),
+            )
+            db.execute(
+                "INSERT INTO admin_activity "
+                "(user_id, action, target_type, target_id, details, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (user["id"], "manual_check", "project", project_id, "Saved check", "now"),
+            )
+            db.commit()
+
+        with site.app.app_context():
+            site.init_db()
+            db = site.get_db()
+            project = db.execute(
+                "SELECT * FROM projects WHERE id = ?",
+                (project_id,),
+            ).fetchone()
+            account = db.execute(
+                "SELECT * FROM users WHERE email = ?",
+                ("persist@example.com",),
+            ).fetchone()
+            comment = db.execute(
+                "SELECT * FROM comments WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+            activity = db.execute(
+                "SELECT * FROM admin_activity WHERE target_id = ?",
+                (project_id,),
+            ).fetchone()
+
+        self.assertEqual(project["title"], "Persistent Game")
+        self.assertEqual(account["name"], "Persist Player")
+        self.assertEqual(comment["body"], "Still here")
+        self.assertEqual(activity["action"], "manual_check")
+        self.assertTrue(os.path.exists(os.path.join(folder, "index.html")))
 
     def test_admin_can_delete_project(self):
         self.login()

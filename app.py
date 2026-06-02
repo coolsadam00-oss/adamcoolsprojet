@@ -169,6 +169,19 @@ def init_db():
         )
         """
     )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS admin_activity (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            action TEXT NOT NULL,
+            target_type TEXT,
+            target_id INTEGER,
+            details TEXT,
+            created_at TEXT
+        )
+        """
+    )
     columns = {
         row["name"] for row in db.execute("PRAGMA table_info(projects)").fetchall()
     }
@@ -300,6 +313,32 @@ def display_name(user):
     if not user:
         return ""
     return user["name"] or user["email"].split("@")[0]
+
+
+def log_admin_activity(action, target_type="", target_id=None, details=""):
+    user = current_user()
+    get_db().execute(
+        "INSERT INTO admin_activity "
+        "(user_id, action, target_type, target_id, details, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            user["id"] if user else None,
+            action[:80],
+            target_type[:80],
+            target_id,
+            details[:500],
+            datetime.datetime.now(datetime.UTC).isoformat(),
+        ),
+    )
+
+
+def recent_admin_activity(limit=20):
+    return get_db().execute(
+        "SELECT a.*, u.name, u.email FROM admin_activity a "
+        "LEFT JOIN users u ON u.id = a.user_id "
+        "ORDER BY a.id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
 
 
 def login_required(view):
@@ -789,6 +828,12 @@ def upload():
             "UPDATE projects SET folder = ?, thumbnail = ? WHERE id = ?",
             (str(pid), thumbnail, pid),
         )
+        log_admin_activity(
+            "upload_project",
+            "project",
+            pid,
+            f"Uploaded game: {title}",
+        )
         db.commit()
 
         flash("Project uploaded successfully.")
@@ -911,7 +956,17 @@ def delete_comment(comment_id):
     if not comment:
         abort(404)
     project_id = comment["project_id"]
+    project = db.execute(
+        "SELECT title FROM projects WHERE id = ?",
+        (project_id,),
+    ).fetchone()
     db.execute("DELETE FROM comments WHERE id = ?", (comment_id,))
+    log_admin_activity(
+        "delete_comment",
+        "comment",
+        comment_id,
+        f"Deleted comment on {project['title'] if project else 'deleted game'}",
+    )
     db.commit()
     flash("Comment deleted.")
     return redirect(url_for("view_project", pid=project_id))
@@ -947,11 +1002,13 @@ def admin_panel():
         projects = db.execute("SELECT * FROM projects ORDER BY id DESC").fetchall()
         users = db.execute("SELECT * FROM users ORDER BY last_login DESC").fetchall()
     avatars = db.execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall()
+    activities = recent_admin_activity()
     return render_template(
         "admin.html",
         projects=projects,
         users=users,
         avatars=avatars,
+        activities=activities,
         q=q,
         lulu_message=None,
     )
@@ -969,6 +1026,12 @@ def delete_project(pid):
     if os.path.commonpath([folder, projects_root]) == projects_root and os.path.isdir(folder):
         shutil.rmtree(folder)
     db.execute("DELETE FROM projects WHERE id = ?", (pid,))
+    log_admin_activity(
+        "delete_project",
+        "project",
+        pid,
+        f"Removed game: {row['title']}",
+    )
     db.commit()
     flash("Game removed.")
     return redirect(url_for("admin_panel"))
@@ -977,8 +1040,18 @@ def delete_project(pid):
 @app.route("/admin/users/<int:user_id>/make-admin", methods=["POST"])
 @admin_required
 def make_admin(user_id):
-    get_db().execute("UPDATE users SET is_admin = 1 WHERE id = ?", (user_id,))
-    get_db().commit()
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not user:
+        abort(404)
+    db.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (user_id,))
+    log_admin_activity(
+        "make_admin",
+        "user",
+        user_id,
+        f"Made admin: {user['email']}",
+    )
+    db.commit()
     flash("User is now an admin.")
     return redirect(url_for("admin_panel"))
 
@@ -998,12 +1071,19 @@ def add_avatar():
     if not image_url:
         flash("Avatar needs an image URL.")
         return redirect(url_for("admin_panel"))
-    get_db().execute(
+    db = get_db()
+    db.execute(
         "INSERT OR IGNORE INTO avatar_options (label, image_url, created_at) "
         "VALUES (?, ?, ?)",
         (label, image_url, datetime.datetime.now(datetime.UTC).isoformat()),
     )
-    get_db().commit()
+    log_admin_activity(
+        "add_avatar",
+        "avatar",
+        None,
+        f"Added profile picture: {label}",
+    )
+    db.commit()
     flash("Profile picture added.")
     return redirect(url_for("admin_panel"))
 
@@ -1018,14 +1098,18 @@ def lulu():
             projects=get_db().execute("SELECT * FROM projects ORDER BY id DESC").fetchall(),
             users=get_db().execute("SELECT * FROM users ORDER BY last_login DESC").fetchall(),
             avatars=get_db().execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall(),
+            activities=recent_admin_activity(),
             q="",
             lulu_message=error,
         ), 400
+    log_admin_activity("lulu_command", "settings", None, message or "")
+    get_db().commit()
     return render_template(
         "admin.html",
         projects=get_db().execute("SELECT * FROM projects ORDER BY id DESC").fetchall(),
         users=get_db().execute("SELECT * FROM users ORDER BY last_login DESC").fetchall(),
         avatars=get_db().execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall(),
+        activities=recent_admin_activity(),
         q="",
         lulu_message=message,
     )
