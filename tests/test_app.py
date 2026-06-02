@@ -159,6 +159,16 @@ class SiteAuthAdminTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_upload_page_mentions_3d_game_uploads(self):
+        self.login()
+
+        response = self.client.get("/upload")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Upload a 2D or 3D game", response.data)
+        self.assertIn(b"2D or 3D HTML5 game ZIP", response.data)
+        self.assertIn(b"Upload 2D / 3D Game", response.data)
+
     def test_google_login_uses_https_callback_and_saves_next_url(self):
         site.app.config["PREFERRED_URL_SCHEME"] = "https"
         with mock.patch.dict(

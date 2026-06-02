@@ -19,7 +19,7 @@
   </nav>
 
   <main class="upload-main">
-    <h2>Upload a new game</h2>
+    <h2>Upload a 2D or 3D game</h2>
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         <ul class="flashes">
@@ -34,9 +34,9 @@
       <label>Title<br><input name="title" required></label>
       <label>Description<br><textarea name="description"></textarea></label>
       <label>Tags (comma separated)<br><input name="tags"></label>
-      <label>Project ZIP (must include an index.html)<br><input type="file" name="file" accept=".zip" required></label>
+      <label>2D or 3D HTML5 game ZIP (must include an index.html)<br><input type="file" name="file" accept=".zip" required></label>
       <label>Thumbnail<br><input type="file" name="thumbnail" accept=".png,.jpg,.jpeg,.gif,.webp"></label>
-      <button type="submit">Upload</button>
+      <button type="submit">Upload 2D / 3D Game</button>
     </form>
   </main>
   <script src="/static/theme.js"></script>
