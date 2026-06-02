@@ -12,6 +12,34 @@ import app as site
 ADMIN_EMAIL = "coolsadam00@gmail.com"
 
 
+class SiteStorageConfigTests(unittest.TestCase):
+    def test_resolve_data_dir_uses_persistent_env_var(self):
+        data_dir = site.resolve_data_dir(
+            {"ADAM_DATA_DIR": "/srv/adam-data", "RENDER_DATA_DIR": "/var/data"},
+            "/app",
+        )
+
+        self.assertEqual(data_dir, "/srv/adam-data")
+
+    def test_resolve_data_dir_uses_render_disk_env_var(self):
+        data_dir = site.resolve_data_dir({"RENDER_DATA_DIR": "/var/data"}, "/app")
+
+        self.assertEqual(data_dir, "/var/data")
+
+    def test_resolve_data_dir_defaults_to_project_data_folder(self):
+        data_dir = site.resolve_data_dir({}, "/app")
+
+        self.assertEqual(data_dir, os.path.join("/app", "data"))
+
+    def test_render_blueprint_mounts_persistent_disk_for_app_data(self):
+        with open("render.yaml", encoding="utf-8") as render_file:
+            blueprint = render_file.read()
+
+        self.assertIn("RENDER_DATA_DIR", blueprint)
+        self.assertIn("    disk:", blueprint)
+        self.assertIn("mountPath: /var/data", blueprint)
+
+
 class SiteAuthAdminTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -389,7 +417,7 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertIn(b"Players", response.data)
         self.assertIn(b"Cool Player", response.data)
 
-    def test_home_search_finds_public_emails(self):
+    def test_home_search_hides_emails_from_non_admins(self):
         with site.app.app_context():
             site.upsert_user("searchable@example.com", "Cool Player")
 
@@ -397,6 +425,30 @@ class SiteAuthAdminTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Players", response.data)
+        self.assertIn(b"Cool Player", response.data)
+        self.assertIn(b"Regular player", response.data)
+        self.assertNotIn(b"searchable@example.com", response.data)
+
+    def test_home_search_shows_admin_role_to_non_admins(self):
+        with site.app.app_context():
+            site.upsert_user(ADMIN_EMAIL, "Adam")
+
+        response = self.client.get("/?q=Adam")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Adam", response.data)
+        self.assertIn(b"Admin", response.data)
+        self.assertNotIn(ADMIN_EMAIL.encode(), response.data)
+
+    def test_home_search_shows_emails_to_admins(self):
+        self.login()
+        with site.app.app_context():
+            site.upsert_user("searchable@example.com", "Cool Player")
+
+        response = self.client.get("/?q=Cool")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Cool Player", response.data)
         self.assertIn(b"searchable@example.com", response.data)
 
     def test_signed_in_user_can_rate_game(self):

@@ -34,16 +34,22 @@ except Exception:
     id_token = None
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-RENDER_DATA = os.environ.get("RENDER_DATA_DIR")
-if RENDER_DATA:
-    DATA_DIR = RENDER_DATA
-else:
-    import tempfile
 
-    DATA_DIR = os.path.join(tempfile.gettempdir(), "adamcoolsprojet_data")
+
+def resolve_data_dir(env=None, base_dir=BASE_DIR):
+    env = env or os.environ
+    return (
+        env.get("ADAM_DATA_DIR")
+        or env.get("RENDER_DATA_DIR")
+        or os.path.join(base_dir, "data")
+    )
+
+
+DATA_DIR = resolve_data_dir()
 
 DB_PATH = os.path.join(DATA_DIR, "projects.db")
 PROJECTS_DIR = os.path.join(DATA_DIR, "projects")
+os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(PROJECTS_DIR, exist_ok=True)
 
 app = Flask(__name__)
@@ -484,7 +490,7 @@ def index():
         ).fetchall()
     if q:
         users = db.execute(
-            "SELECT id, name, email, picture FROM users "
+            "SELECT id, name, email, picture, is_admin FROM users "
             "WHERE email_verified = 1 AND (name LIKE ? OR email LIKE ?) "
             "ORDER BY name LIMIT 12",
             (like, like),
@@ -492,7 +498,14 @@ def index():
     else:
         users = []
     projects = [dict(r) for r in rows]
-    return render_template("index.html", projects=projects, users=users, q=q)
+    visible_q = q if is_admin() or "@" not in q else ""
+    return render_template(
+        "index.html",
+        projects=projects,
+        users=users,
+        q=q,
+        visible_q=visible_q,
+    )
 
 
 @app.route("/login", methods=["GET", "POST"])

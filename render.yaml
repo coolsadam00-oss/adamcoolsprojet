@@ -6,3 +6,10 @@ services:
     region: oregon
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --log-file -
+    envVars:
+      - key: RENDER_DATA_DIR
+        value: /var/data
+    disk:
+      name: adamcoolsprojet-data
+      mountPath: /var/data
+      sizeGB: 1
