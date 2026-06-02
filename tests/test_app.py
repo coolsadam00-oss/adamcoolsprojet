@@ -1,6 +1,7 @@
 import io
 import os
 import shutil
+import sqlite3
 import tempfile
 import unittest
 import zipfile
@@ -45,7 +46,9 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         site.DB_PATH = os.path.join(self.tmp, "projects.db")
         site.PROJECTS_DIR = os.path.join(self.tmp, "projects")
+        site.BACKUPS_DIR = os.path.join(self.tmp, "backups")
         os.makedirs(site.PROJECTS_DIR, exist_ok=True)
+        os.makedirs(site.BACKUPS_DIR, exist_ok=True)
         site.app.config.update(TESTING=True, WTF_CSRF_ENABLED=False)
         with site.app.app_context():
             site.init_db()
@@ -742,6 +745,64 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(comment["body"], "Still here")
         self.assertEqual(activity["action"], "manual_check")
         self.assertTrue(os.path.exists(os.path.join(folder, "index.html")))
+
+    def test_successful_changes_create_database_backup_with_saved_data(self):
+        self.login()
+
+        upload_response = self.client.post(
+            "/upload",
+            data={
+                "title": "Backup Game",
+                "description": "Backup this",
+                "tags": "backup",
+                "file": (self.make_zip(), "backup.zip"),
+            },
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(upload_response.status_code, 302)
+        with site.app.app_context():
+            project = site.get_db().execute(
+                "SELECT id FROM projects WHERE title = ?",
+                ("Backup Game",),
+            ).fetchone()
+        self.login("commenter@example.com", "Commenter")
+        comment_response = self.client.post(
+            f"/project/{project['id']}/comments",
+            data={"body": "Back this up too"},
+        )
+
+        self.assertEqual(comment_response.status_code, 302)
+        backups = sorted(
+            name for name in os.listdir(site.BACKUPS_DIR) if name.endswith(".db")
+        )
+        self.assertTrue(backups)
+        backup_path = os.path.join(site.BACKUPS_DIR, backups[-1])
+        backup = sqlite3.connect(backup_path)
+        backup.row_factory = sqlite3.Row
+        try:
+            saved_project = backup.execute(
+                "SELECT * FROM projects WHERE title = ?",
+                ("Backup Game",),
+            ).fetchone()
+            saved_account = backup.execute(
+                "SELECT * FROM users WHERE email = ?",
+                ("commenter@example.com",),
+            ).fetchone()
+            saved_comment = backup.execute(
+                "SELECT * FROM comments WHERE body = ?",
+                ("Back this up too",),
+            ).fetchone()
+            saved_activity = backup.execute(
+                "SELECT * FROM admin_activity WHERE action = ?",
+                ("upload_project",),
+            ).fetchone()
+        finally:
+            backup.close()
+        self.assertEqual(saved_project["title"], "Backup Game")
+        self.assertEqual(saved_account["name"], "Commenter")
+        self.assertEqual(saved_comment["body"], "Back this up too")
+        self.assertIn("Backup Game", saved_activity["details"])
 
     def test_admin_can_delete_project(self):
         self.login()

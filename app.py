@@ -49,8 +49,10 @@ DATA_DIR = resolve_data_dir()
 
 DB_PATH = os.path.join(DATA_DIR, "projects.db")
 PROJECTS_DIR = os.path.join(DATA_DIR, "projects")
+BACKUPS_DIR = os.path.join(DATA_DIR, "backups")
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(PROJECTS_DIR, exist_ok=True)
+os.makedirs(BACKUPS_DIR, exist_ok=True)
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
@@ -88,7 +90,44 @@ def get_db():
     if db is None:
         db = g.db = sqlite3.connect(DB_PATH)
         db.row_factory = sqlite3.Row
+        db.execute("PRAGMA foreign_keys = ON")
+        db.execute("PRAGMA journal_mode = WAL")
+        db.execute("PRAGMA synchronous = FULL")
     return db
+
+
+def backup_database(reason="change"):
+    if not os.path.exists(DB_PATH):
+        return None
+    os.makedirs(BACKUPS_DIR, exist_ok=True)
+    safe_reason = re.sub(r"[^a-z0-9_-]+", "-", reason.lower()).strip("-")[:40]
+    stamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d%H%M%S%f")
+    filename = f"projects-{stamp}-{safe_reason or 'change'}.db"
+    backup_path = os.path.join(BACKUPS_DIR, filename)
+    temp_path = backup_path + ".tmp"
+    source = sqlite3.connect(DB_PATH)
+    target = sqlite3.connect(temp_path)
+    try:
+        source.backup(target)
+    finally:
+        target.close()
+        source.close()
+    os.replace(temp_path, backup_path)
+    prune_database_backups()
+    return backup_path
+
+
+def prune_database_backups(keep=30):
+    if not os.path.isdir(BACKUPS_DIR):
+        return
+    backups = sorted(
+        name for name in os.listdir(BACKUPS_DIR) if name.endswith(".db")
+    )
+    for name in backups[:-keep]:
+        try:
+            os.remove(os.path.join(BACKUPS_DIR, name))
+        except OSError:
+            pass
 
 
 def init_db():
@@ -237,6 +276,16 @@ def close_db(exc):
     db = getattr(g, "db", None)
     if db is not None:
         db.close()
+
+
+@app.after_request
+def backup_after_successful_change(response):
+    if request.method == "POST" and response.status_code < 400:
+        try:
+            backup_database(request.endpoint or "post")
+        except Exception as error:
+            app.logger.warning("Database backup failed: %s", error)
+    return response
 
 
 with app.app_context():
