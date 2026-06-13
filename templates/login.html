@@ -14,7 +14,7 @@
       <div class="auth-intro">
         <a class="auth-brand brand-lockup" href="/"><img src="/static/site-icon.svg" alt=""> <span>{{ site_name }}</span></a>
         <h1>Play as guest, sign in when you want an account.</h1>
-        <p>Search and play games without logging in. Create an account to keep your identity, verify your email, and unlock admin tools if you have access.</p>
+        <p>Search and play games without logging in. Create an account with a username. Email is optional and only used as a safety address.</p>
         <a class="guest-link" href="/">Continue as guest</a>
       </div>
       <div class="auth-panel">
@@ -32,15 +32,16 @@
           <h2>Sign in</h2>
           <p class="form-note">Use this after your email is verified.</p>
           <input type="hidden" name="next" value="{{ next_url }}">
-          <label>Email or admin login<input name="email" type="text" autocomplete="username" required></label>
+          <label>Username or email<input name="email" type="text" autocomplete="username" required></label>
           <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
           <label class="check-row"><input name="remember_device" type="checkbox"> Remember this device</label>
           <button type="submit">Sign in</button>
         </form>
         <form method="post" action="/signup" class="auth-form">
           <h2>Sign up</h2>
-          <p class="form-note">We send a link so nobody can use your email without permission.</p>
-          <label>Email<input name="email" type="email" autocomplete="email" required></label>
+          <p class="form-note">Like Roblox-style accounts: username is required, email is optional for safety.</p>
+          <label>Username<input name="username" type="text" autocomplete="username" minlength="3" maxlength="32" pattern="[A-Za-z0-9_.-]+" required></label>
+          <label>Safety email (optional)<input name="email" type="email" autocomplete="email"></label>
           <label>Password<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
           <label>Confirm password<input name="confirm_password" type="password" autocomplete="new-password" minlength="8" required></label>
           <label class="check-row"><input name="agree_terms" type="checkbox" required> I agree to the <a href="/terms">Website Rules</a> and <a href="/privacy">Privacy Policy</a>.</label>
@@ -48,8 +49,8 @@
         </form>
         <form method="post" action="/resend-verification" class="auth-form auth-form-soft">
           <h2>Need the email again?</h2>
-          <p class="form-note">If the site says your email is not verified, resend the link and check spam too.</p>
-          <label>Email<input name="email" type="email" autocomplete="email" required></label>
+          <p class="form-note">If you added a safety email, resend the verification link here.</p>
+          <label>Username or email<input name="email" type="text" autocomplete="username" required></label>
           <button type="submit">Resend verification</button>
         </form>
         {% if google_ready %}

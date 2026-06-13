@@ -20,7 +20,7 @@
   <main class="account-main">
     <section class="account-panel">
       <h1>Your account</h1>
-      <p class="muted">{{ current_user.email }}</p>
+      <p class="muted">{{ current_user.username or display_name }}{% if current_user.email %} - {{ current_user.email }}{% endif %}</p>
       {% with messages = get_flashed_messages() %}
         {% if messages %}
           <ul class="flashes">
@@ -32,7 +32,7 @@
       {% endwith %}
       <form method="post" action="/account/profile" class="profile-form">
         <h2>Public profile</h2>
-        <p class="muted">Your username and email can be found with website search.</p>
+        <p class="muted">Your public name can be found with website search. Email is only shown to admins.</p>
         <div class="profile-preview">
           {% if current_user.picture %}
             <img class="profile-avatar-img large" src="{{ current_user.picture }}" alt="">
@@ -41,7 +41,7 @@
           {% endif %}
           <div>
             <strong>{{ display_name }}</strong>
-            <span>{{ current_user.email }}</span>
+            <span>{{ current_user.email or 'No safety email added' }}</span>
           </div>
         </div>
         <label>Username<input name="username" maxlength="32" value="{{ display_name }}" required></label>

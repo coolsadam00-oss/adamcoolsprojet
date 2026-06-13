@@ -140,7 +140,10 @@ def init_db():
             description TEXT,
             tags TEXT,
             folder TEXT,
-            created_at TEXT
+            created_at TEXT,
+            thumbnail TEXT,
+            platform_support TEXT NOT NULL DEFAULT 'pc',
+            source_zip TEXT
         )
         """
     )
@@ -148,7 +151,8 @@ def init_db():
         """
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
+            email TEXT UNIQUE,
+            username TEXT UNIQUE,
             name TEXT,
             picture TEXT,
             is_admin INTEGER NOT NULL DEFAULT 0,
@@ -226,9 +230,64 @@ def init_db():
     }
     if "thumbnail" not in columns:
         db.execute("ALTER TABLE projects ADD COLUMN thumbnail TEXT")
+    if "platform_support" not in columns:
+        db.execute("ALTER TABLE projects ADD COLUMN platform_support TEXT NOT NULL DEFAULT 'pc'")
+    if "source_zip" not in columns:
+        db.execute("ALTER TABLE projects ADD COLUMN source_zip TEXT")
+    rebuild_users_if_email_is_required(db)
+    user_columns = {
+        row["name"] for row in db.execute("PRAGMA table_info(users)").fetchall()
+    }
+    if "username" not in user_columns:
+        db.execute("ALTER TABLE users ADD COLUMN username TEXT")
+        db.execute(
+            "UPDATE users SET username = lower(substr(email, 1, instr(email, '@') - 1)) || id "
+            "WHERE username IS NULL AND email IS NOT NULL AND instr(email, '@') > 1"
+        )
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)")
     seed_default_avatars(db)
     seed_premade_account(db)
     db.commit()
+
+
+def rebuild_users_if_email_is_required(db):
+    user_info = db.execute("PRAGMA table_info(users)").fetchall()
+    if not any(row["name"] == "email" and row["notnull"] for row in user_info):
+        return
+    db.execute("ALTER TABLE users RENAME TO users_old")
+    db.execute(
+        """
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE,
+            username TEXT UNIQUE,
+            name TEXT,
+            picture TEXT,
+            is_admin INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT,
+            last_login TEXT,
+            password_hash TEXT,
+            email_verified INTEGER NOT NULL DEFAULT 0,
+            verification_token TEXT
+        )
+        """
+    )
+    old_columns = {
+        row["name"] for row in db.execute("PRAGMA table_info(users_old)").fetchall()
+    }
+    username_expr = (
+        "username" if "username" in old_columns
+        else "lower(substr(email, 1, instr(email, '@') - 1)) || id"
+    )
+    db.execute(
+        "INSERT INTO users "
+        "(id, email, username, name, picture, is_admin, created_at, last_login, "
+        "password_hash, email_verified, verification_token) "
+        f"SELECT id, email, {username_expr}, name, picture, is_admin, created_at, "
+        "last_login, password_hash, email_verified, verification_token FROM users_old"
+    )
+    db.execute("DROP TABLE users_old")
 
 
 def seed_default_avatars(db):
@@ -251,17 +310,19 @@ def seed_premade_account(db):
     if existing:
         db.execute(
             "UPDATE users SET name = COALESCE(NULLIF(name, ''), ?), "
+            "username = COALESCE(NULLIF(username, ''), ?), "
             "is_admin = 1, password_hash = ?, email_verified = 1, "
             "verification_token = NULL WHERE id = ?",
-            (ADMIN_EMAIL.split("@")[0], password_hash, existing["id"]),
+            (ADMIN_EMAIL.split("@")[0], ADMIN_LOGIN.lower(), password_hash, existing["id"]),
         )
         return
     db.execute(
-        "INSERT INTO users (email, name, picture, is_admin, created_at, last_login, "
+        "INSERT INTO users (email, username, name, picture, is_admin, created_at, last_login, "
         "password_hash, email_verified, verification_token) "
-        "VALUES (?, ?, ?, 1, ?, ?, ?, 1, NULL)",
+        "VALUES (?, ?, ?, ?, 1, ?, ?, ?, 1, NULL)",
         (
             ADMIN_EMAIL,
+            ADMIN_LOGIN.lower(),
             ADMIN_EMAIL.split("@")[0],
             "",
             now,
@@ -320,22 +381,24 @@ def set_setting(key, value):
 
 def upsert_user(email, name="", picture=""):
     email = email.strip().lower()
+    username = unique_username((name or email.split("@")[0]).strip() or email.split("@")[0])
     now = datetime.datetime.now(datetime.UTC).isoformat()
     is_seed_admin = 1 if email == ADMIN_EMAIL else 0
     db = get_db()
     existing = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
     if existing:
         db.execute(
-            "UPDATE users SET name = ?, picture = ?, last_login = ?, "
+            "UPDATE users SET name = ?, username = COALESCE(NULLIF(username, ''), ?), "
+            "picture = ?, last_login = ?, "
             "email_verified = 1, "
             "is_admin = CASE WHEN email = ? THEN 1 ELSE is_admin END WHERE id = ?",
-            (name or existing["name"], picture or existing["picture"], now, ADMIN_EMAIL, existing["id"]),
+            (name or existing["name"], username, picture or existing["picture"], now, ADMIN_EMAIL, existing["id"]),
         )
     else:
         db.execute(
-            "INSERT INTO users (email, name, picture, is_admin, created_at, last_login, email_verified) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (email, name, picture, is_seed_admin, now, now, 1),
+            "INSERT INTO users (email, username, name, picture, is_admin, created_at, last_login, email_verified) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (email, username, name, picture, is_seed_admin, now, now, 1),
         )
     db.commit()
     return db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
@@ -361,7 +424,7 @@ def is_admin():
 def display_name(user):
     if not user:
         return ""
-    return user["name"] or user["email"].split("@")[0]
+    return user["name"] or user["username"] or (user["email"].split("@")[0] if user["email"] else "player")
 
 
 def log_admin_activity(action, target_type="", target_id=None, details=""):
@@ -429,30 +492,67 @@ def clean_image_url(value):
     return value[:500]
 
 
-def create_password_user(email, password):
-    email = email.strip().lower()
+def clean_username(value):
+    username = value.strip().lower()
+    if len(username) < 3 or len(username) > 32:
+        raise ValueError("Username must be 3 to 32 characters.")
+    if not re.fullmatch(r"[a-z0-9_.-]+", username):
+        raise ValueError("Username can use letters, numbers, dots, dashes, and underscores.")
+    return username
+
+
+def unique_username(value):
+    base = re.sub(r"[^a-z0-9_.-]+", "", value.strip().lower())[:24] or "player"
+    db = get_db()
+    username = base
+    suffix = 2
+    while db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone():
+        username = f"{base}{suffix}"
+        suffix += 1
+    return username
+
+
+def lookup_user_by_identifier(identifier):
+    identifier = identifier.strip().lower()
+    if identifier == ADMIN_LOGIN.lower():
+        identifier = ADMIN_EMAIL
+    if "@" in identifier:
+        return get_db().execute("SELECT * FROM users WHERE email = ?", (identifier,)).fetchone()
+    return get_db().execute("SELECT * FROM users WHERE username = ?", (identifier,)).fetchone()
+
+
+def create_password_user(username, password, email=""):
+    username = clean_username(username)
+    email = email.strip().lower() or None
     token = secrets.token_urlsafe(32)
     now = datetime.datetime.now(datetime.UTC).isoformat()
     db = get_db()
-    existing = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    existing = db.execute(
+        "SELECT * FROM users WHERE username = ? OR (email IS NOT NULL AND email = ?)",
+        (username, email),
+    ).fetchone()
     password_hash = generate_password_hash(password)
     is_seed_admin = 1 if email == ADMIN_EMAIL else 0
     if existing:
+        if existing["username"] == username:
+            raise ValueError("That username is already taken.")
+        if email and existing["email"] == email:
+            raise ValueError("That safety email is already used.")
         db.execute(
-            "UPDATE users SET password_hash = ?, verification_token = ?, "
+            "UPDATE users SET username = ?, password_hash = ?, verification_token = ?, "
             "email_verified = 0, is_admin = CASE WHEN email = ? THEN 1 ELSE is_admin END "
             "WHERE id = ?",
-            (password_hash, token, ADMIN_EMAIL, existing["id"]),
+            (username, password_hash, token if email else None, ADMIN_EMAIL, existing["id"]),
         )
     else:
         db.execute(
-            "INSERT INTO users (email, name, picture, is_admin, created_at, last_login, "
+            "INSERT INTO users (email, username, name, picture, is_admin, created_at, last_login, "
             "password_hash, email_verified, verification_token) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
-            (email, email.split("@")[0], "", is_seed_admin, now, now, password_hash, token),
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
+            (email, username, username, "", is_seed_admin, now, now, password_hash, token if email else None),
         )
     db.commit()
-    return db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    return db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
 
 
 def send_verification_email(email, token):
@@ -481,24 +581,17 @@ def send_verification_email(email, token):
         smtp.send_message(message)
 
 
-def authenticate_password_user(email, password):
+def authenticate_password_user(identifier, password):
     db = get_db()
-    email = email.strip().lower()
-    if email == ADMIN_LOGIN.lower():
-        email = ADMIN_EMAIL
-    if email == ADMIN_EMAIL:
+    identifier = identifier.strip().lower()
+    if identifier in {ADMIN_LOGIN.lower(), ADMIN_EMAIL}:
         seed_premade_account(db)
         db.commit()
-    user = db.execute(
-        "SELECT * FROM users WHERE email = ?",
-        (email,),
-    ).fetchone()
+    user = lookup_user_by_identifier(identifier)
     if not user or not user["password_hash"]:
-        return None, "Email or password is wrong."
+        return None, "Username/email or password is wrong."
     if not check_password_hash(user["password_hash"], password):
-        return None, "Email or password is wrong."
-    if not user["email_verified"]:
-        return None, "Your account exists, but the email is not verified yet. Check your inbox or resend the link."
+        return None, "Username/email or password is wrong."
     return user, None
 
 
@@ -521,6 +614,33 @@ def save_thumbnail(file, folder):
     filename = f"thumbnail{ext}"
     file.save(os.path.join(folder, filename))
     return filename
+
+
+PLATFORM_OPTIONS = {
+    "mobile": "Mobile game",
+    "pc": "PC game",
+    "mobile_pc": "Mobile and PC supported",
+}
+
+
+def validate_platform_support(value):
+    value = value.strip()
+    if value not in PLATFORM_OPTIONS:
+        raise ValueError("Choose if this is a mobile game, PC game, or both.")
+    return value
+
+
+def save_and_extract_game_zip(file, folder):
+    if not file:
+        raise ValueError("Please choose a zip file containing your project (HTML/CSS/JS).")
+    if not file.filename.lower().endswith(".zip"):
+        raise ValueError("Only .zip uploads are accepted for now.")
+    os.makedirs(folder, exist_ok=True)
+    zip_path = os.path.join(folder, "source.zip")
+    file.save(zip_path)
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        safe_extract_zip(zf, folder)
+    return "source.zip"
 
 
 def apply_lulu_command(prompt):
@@ -589,10 +709,10 @@ def index():
         ).fetchall()
     if q:
         users = db.execute(
-            "SELECT id, name, email, picture, is_admin FROM users "
-            "WHERE email_verified = 1 AND (name LIKE ? OR email LIKE ?) "
+            "SELECT id, name, username, email, picture, is_admin FROM users "
+            "WHERE name LIKE ? OR username LIKE ? OR email LIKE ? "
             "ORDER BY name LIMIT 12",
-            (like, like),
+            (like, like, like),
         ).fetchall()
     else:
         users = []
@@ -631,12 +751,18 @@ def login():
 
 @app.route("/signup", methods=["POST"])
 def signup():
+    username = request.form.get("username", "").strip()
     email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
     confirm_password = request.form.get("confirm_password", "")
     agree_terms = request.form.get("agree_terms")
-    if not email or "@" not in email:
-        flash("Enter a valid email address.")
+    try:
+        clean_username(username)
+    except ValueError as error:
+        flash(str(error))
+        return redirect(url_for("login"))
+    if email and "@" not in email:
+        flash("Enter a valid safety email address, or leave it empty.")
         return redirect(url_for("login"))
     if len(password) < 8:
         flash("Password must be at least 8 characters.")
@@ -648,21 +774,27 @@ def signup():
         flash("You must agree to the Website Rules and Privacy Policy.")
         return redirect(url_for("login"))
 
-    user = create_password_user(email, password)
-    send_verification_email(user["email"], user["verification_token"])
-    flash("Account created. Check your inbox, then click the verification link.")
+    try:
+        user = create_password_user(username, password, email)
+    except ValueError as error:
+        flash(str(error))
+        return redirect(url_for("login"))
+    if user["email"] and user["verification_token"]:
+        send_verification_email(user["email"], user["verification_token"])
+        flash("Account created. You can sign in now. Check your email to verify your safety address.")
+    else:
+        flash("Account created. You can sign in now.")
     return redirect(url_for("login"))
 
 
 @app.route("/resend-verification", methods=["POST"])
 def resend_verification():
-    email = request.form.get("email", "").strip().lower()
-    user = get_db().execute(
-        "SELECT * FROM users WHERE email = ?",
-        (email,),
-    ).fetchone()
+    user = lookup_user_by_identifier(request.form.get("email", ""))
     if not user:
-        flash("No account was found for that email.")
+        flash("No account was found for that username or email.")
+        return redirect(url_for("login"))
+    if not user["email"]:
+        flash("This account does not have a safety email yet.")
         return redirect(url_for("login"))
     if user["email_verified"]:
         flash("That email is already verified. You can sign in.")
@@ -835,47 +967,40 @@ def upload():
         description = request.form.get("description", "").strip()
         tags = request.form.get("tags", "").strip()
         file = request.files.get("file")
-        if not file:
-            flash("Please choose a zip file containing your project (HTML/CSS/JS).")
+        try:
+            platform_support = validate_platform_support(request.form.get("platform_support", ""))
+        except ValueError as error:
+            flash(str(error))
             return redirect(request.url)
-        if not file.filename.lower().endswith(".zip"):
-            flash("Only .zip uploads are accepted for now.")
+        if request.form.get("confirm_upload") != "on":
+            flash("Confirm the game type and upload rules before uploading.")
             return redirect(request.url)
 
         db = get_db()
         created_at = datetime.datetime.now(datetime.UTC).isoformat()
         cur = db.execute(
-            "INSERT INTO projects (title, description, tags, folder, created_at, thumbnail) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (title, description, tags, "", created_at, ""),
+            "INSERT INTO projects (title, description, tags, folder, created_at, thumbnail, platform_support, source_zip) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (title, description, tags, "", created_at, "", platform_support, ""),
         )
         db.commit()
         pid = cur.lastrowid
         folder = os.path.join(PROJECTS_DIR, str(pid))
-        os.makedirs(folder, exist_ok=True)
-
-        zip_path = os.path.join(folder, "upload.zip")
-        file.save(zip_path)
 
         try:
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                safe_extract_zip(zf, folder)
+            source_zip = save_and_extract_game_zip(file, folder)
             thumbnail = save_thumbnail(request.files.get("thumbnail"), folder)
         except Exception as e:
+            if os.path.isdir(folder):
+                shutil.rmtree(folder)
             db.execute("DELETE FROM projects WHERE id = ?", (pid,))
             db.commit()
-            flash("Failed to extract zip: " + str(e))
+            flash("Failed to upload zip: " + str(e))
             return redirect(request.url)
 
-        # remove uploaded zip to save space
-        try:
-            os.remove(zip_path)
-        except Exception:
-            pass
-
         db.execute(
-            "UPDATE projects SET folder = ?, thumbnail = ? WHERE id = ?",
-            (str(pid), thumbnail, pid),
+            "UPDATE projects SET folder = ?, thumbnail = ?, source_zip = ? WHERE id = ?",
+            (str(pid), thumbnail, source_zip, pid),
         )
         log_admin_activity(
             "upload_project",
@@ -888,7 +1013,7 @@ def upload():
         flash("Project uploaded successfully.")
         return redirect(url_for("index"))
 
-    return render_template("upload.html")
+    return render_template("upload.html", platform_options=PLATFORM_OPTIONS)
 
 
 @app.route("/project/<int:pid>")
@@ -912,7 +1037,7 @@ def view_project(pid):
         if rating:
             user_rating = rating["score"]
     comments = db.execute(
-        "SELECT c.*, u.name, u.email, u.picture, u.is_admin "
+        "SELECT c.*, u.name, u.username, u.email, u.picture, u.is_admin "
         "FROM comments c JOIN users u ON u.id = c.user_id "
         "WHERE c.project_id = ? ORDER BY c.id DESC",
         (pid,),
@@ -1032,6 +1157,91 @@ def project_files(pid, filename):
     return send_from_directory(folder, filename)
 
 
+@app.route("/admin/projects/<int:pid>/source.zip")
+@admin_required
+def download_project_source(pid):
+    project = get_db().execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+    if not project or not project["source_zip"]:
+        abort(404)
+    folder = os.path.abspath(os.path.join(PROJECTS_DIR, str(pid)))
+    source_path = os.path.join(folder, project["source_zip"])
+    if not os.path.exists(source_path):
+        abort(404)
+    return send_from_directory(
+        folder,
+        project["source_zip"],
+        as_attachment=True,
+        download_name=f"{project['title'] or 'project'}-source.zip",
+    )
+
+
+@app.route("/admin/projects/<int:pid>/replace", methods=["POST"])
+@admin_required
+def replace_project_source(pid):
+    db = get_db()
+    project = db.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+    if not project:
+        abort(404)
+    try:
+        platform_support = validate_platform_support(request.form.get("platform_support", ""))
+    except ValueError as error:
+        flash(str(error))
+        return redirect(url_for("admin_panel"))
+    if request.form.get("confirm_upload") != "on":
+        flash("Confirm the replacement before updating this game.")
+        return redirect(url_for("admin_panel"))
+
+    folder = os.path.abspath(os.path.join(PROJECTS_DIR, str(pid)))
+    projects_root = os.path.abspath(PROJECTS_DIR)
+    if os.path.commonpath([folder, projects_root]) != projects_root:
+        abort(403)
+    backup_folder = folder + ".replace-backup"
+    if os.path.exists(backup_folder):
+        shutil.rmtree(backup_folder)
+    if os.path.isdir(folder):
+        shutil.copytree(folder, backup_folder)
+        shutil.rmtree(folder)
+    os.makedirs(folder, exist_ok=True)
+    try:
+        source_zip = save_and_extract_game_zip(request.files.get("file"), folder)
+    except Exception as error:
+        if os.path.isdir(folder):
+            shutil.rmtree(folder)
+        if os.path.isdir(backup_folder):
+            shutil.copytree(backup_folder, folder)
+            shutil.rmtree(backup_folder)
+        flash("Failed to replace zip: " + str(error))
+        return redirect(url_for("admin_panel"))
+    if os.path.isdir(backup_folder):
+        shutil.rmtree(backup_folder)
+    db.execute(
+        "UPDATE projects SET platform_support = ?, source_zip = ? WHERE id = ?",
+        (platform_support, source_zip, pid),
+    )
+    log_admin_activity(
+        "replace_project_zip",
+        "project",
+        pid,
+        f"Replaced uploaded files for: {project['title']}",
+    )
+    db.commit()
+    flash("Game files updated.")
+    return redirect(url_for("admin_panel"))
+
+
+def project_file_list(pid):
+    folder = os.path.join(PROJECTS_DIR, str(pid))
+    if not os.path.isdir(folder):
+        return []
+    files = []
+    for root, dirs, names in os.walk(folder):
+        dirs[:] = [name for name in dirs if not name.startswith(".")]
+        for name in names:
+            rel = os.path.relpath(os.path.join(root, name), folder).replace("\\", "/")
+            files.append(rel)
+    return sorted(files)
+
+
 @app.route("/admin")
 @admin_required
 def admin_panel():
@@ -1044,12 +1254,15 @@ def admin_panel():
             (like, like, like),
         ).fetchall()
         users = db.execute(
-            "SELECT * FROM users WHERE email LIKE ? OR name LIKE ? ORDER BY last_login DESC",
-            (like, like),
+            "SELECT * FROM users WHERE email LIKE ? OR name LIKE ? OR username LIKE ? ORDER BY last_login DESC",
+            (like, like, like),
         ).fetchall()
     else:
         projects = db.execute("SELECT * FROM projects ORDER BY id DESC").fetchall()
         users = db.execute("SELECT * FROM users ORDER BY last_login DESC").fetchall()
+    projects = [dict(project) for project in projects]
+    for project in projects:
+        project["files"] = project_file_list(project["id"])
     avatars = db.execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall()
     activities = recent_admin_activity()
     return render_template(

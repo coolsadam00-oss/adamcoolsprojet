@@ -34,8 +34,15 @@
       <label>Title<br><input name="title" required></label>
       <label>Description<br><textarea name="description"></textarea></label>
       <label>Tags (comma separated)<br><input name="tags"></label>
+      <fieldset class="platform-fieldset">
+        <legend>Game support</legend>
+        {% for value, label in platform_options.items() %}
+          <label class="check-row"><input type="radio" name="platform_support" value="{{ value }}" required> {{ label }}</label>
+        {% endfor %}
+      </fieldset>
       <label>2D or 3D HTML5 game ZIP (must include an index.html)<br><input type="file" name="file" accept=".zip" required></label>
       <label>Thumbnail<br><input type="file" name="thumbnail" accept=".png,.jpg,.jpeg,.gif,.webp"></label>
+      <label class="check-row"><input name="confirm_upload" type="checkbox" required> I confirm this ZIP is my game upload and the selected device support is correct.</label>
       <button type="submit">Upload 2D / 3D Game</button>
     </form>
   </main>

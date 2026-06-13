@@ -192,7 +192,7 @@ class SiteAuthAdminTests(unittest.TestCase):
         response = self.client.post(
             "/signup",
             data={
-                "email": "new@example.com",
+                "username": "newplayer",
                 "password": "secret123",
                 "confirm_password": "different",
             },
@@ -201,8 +201,8 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         with site.app.app_context():
             user = site.get_db().execute(
-                "SELECT * FROM users WHERE email = ?",
-                ("new@example.com",),
+                "SELECT * FROM users WHERE username = ?",
+                ("newplayer",),
             ).fetchone()
         self.assertIsNone(user)
 
@@ -210,7 +210,7 @@ class SiteAuthAdminTests(unittest.TestCase):
         response = self.client.post(
             "/signup",
             data={
-                "email": "new@example.com",
+                "username": "newplayer",
                 "password": "secret123",
                 "confirm_password": "secret123",
             },
@@ -219,17 +219,48 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         with site.app.app_context():
             user = site.get_db().execute(
-                "SELECT * FROM users WHERE email = ?",
-                ("new@example.com",),
+                "SELECT * FROM users WHERE username = ?",
+                ("newplayer",),
             ).fetchone()
         self.assertIsNone(user)
 
-    def test_signup_creates_unverified_user_and_sends_email(self):
+    def test_signup_creates_username_account_without_email(self):
+        response = self.client.post(
+            "/signup",
+            data={
+                "username": "newplayer",
+                "password": "secret123",
+                "confirm_password": "secret123",
+                "agree_terms": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            user = site.get_db().execute(
+                "SELECT * FROM users WHERE username = ?",
+                ("newplayer",),
+            ).fetchone()
+        self.assertEqual(user["name"], "newplayer")
+        self.assertIsNone(user["email"])
+        self.assertEqual(user["email_verified"], 0)
+        self.assertTrue(user["password_hash"])
+
+        login_response = self.client.post(
+            "/login",
+            data={"email": "newplayer", "password": "secret123"},
+        )
+        self.assertEqual(login_response.status_code, 302)
+        with self.client.session_transaction() as session:
+            self.assertIn("user_id", session)
+
+    def test_signup_accepts_optional_safety_email_without_blocking_login(self):
         sent = []
         with mock.patch.object(site, "send_verification_email", side_effect=lambda email, token: sent.append((email, token))):
             response = self.client.post(
                 "/signup",
                 data={
+                    "username": "newplayer",
                     "email": "new@example.com",
                     "password": "secret123",
                     "confirm_password": "secret123",
@@ -244,15 +275,25 @@ class SiteAuthAdminTests(unittest.TestCase):
                 ("new@example.com",),
             ).fetchone()
         self.assertEqual(user["email_verified"], 0)
+        self.assertEqual(user["username"], "newplayer")
         self.assertTrue(user["password_hash"])
         self.assertEqual(sent[0][0], "new@example.com")
         self.assertEqual(sent[0][1], user["verification_token"])
 
-    def test_verify_email_allows_password_login(self):
+        login_response = self.client.post(
+            "/login",
+            data={"email": "newplayer", "password": "secret123"},
+        )
+        self.assertEqual(login_response.status_code, 302)
+        with self.client.session_transaction() as session:
+            self.assertIn("user_id", session)
+
+    def test_verify_email_marks_safety_email_verified(self):
         with mock.patch.object(site, "send_verification_email"):
             self.client.post(
                 "/signup",
                 data={
+                    "username": "newplayer",
                     "email": "new@example.com",
                     "password": "secret123",
                     "confirm_password": "secret123",
@@ -290,33 +331,13 @@ class SiteAuthAdminTests(unittest.TestCase):
         with self.client.session_transaction() as session:
             self.assertTrue(session["_permanent"])
 
-    def test_unverified_user_cannot_password_login(self):
-        with mock.patch.object(site, "send_verification_email"):
-            self.client.post(
-                "/signup",
-                data={
-                    "email": "new@example.com",
-                    "password": "secret123",
-                    "confirm_password": "secret123",
-                    "agree_terms": "on",
-                },
-            )
-
-        response = self.client.post(
-            "/login",
-            data={"email": "new@example.com", "password": "secret123"},
-        )
-
-        self.assertEqual(response.status_code, 302)
-        with self.client.session_transaction() as session:
-            self.assertNotIn("user_id", session)
-
     def test_unverified_user_can_request_another_verification_email(self):
         sent = []
         with mock.patch.object(site, "send_verification_email"):
             self.client.post(
                 "/signup",
                 data={
+                    "username": "newplayer",
                     "email": "new@example.com",
                     "password": "secret123",
                     "confirm_password": "secret123",
@@ -657,6 +678,8 @@ class SiteAuthAdminTests(unittest.TestCase):
                 "title": "Space Run",
                 "description": "Fast arcade game",
                 "tags": "arcade,space",
+                "platform_support": "mobile_pc",
+                "confirm_upload": "on",
                 "file": (self.make_zip(), "space.zip"),
                 "thumbnail": (io.BytesIO(b"fake-png"), "thumb.png"),
             },
@@ -667,7 +690,37 @@ class SiteAuthAdminTests(unittest.TestCase):
         with site.app.app_context():
             row = site.get_db().execute("SELECT * FROM projects").fetchone()
         self.assertEqual(row["title"], "Space Run")
+        self.assertEqual(row["platform_support"], "mobile_pc")
+        self.assertEqual(row["source_zip"], "source.zip")
         self.assertTrue(row["thumbnail"].endswith("thumbnail.png"))
+
+    def test_upload_requires_platform_support_choice_and_confirmation(self):
+        self.login()
+
+        missing_platform = self.client.post(
+            "/upload",
+            data={
+                "title": "No Platform",
+                "file": (self.make_zip(), "game.zip"),
+                "confirm_upload": "on",
+            },
+            content_type="multipart/form-data",
+        )
+        missing_confirm = self.client.post(
+            "/upload",
+            data={
+                "title": "No Confirm",
+                "platform_support": "pc",
+                "file": (self.make_zip(), "game.zip"),
+            },
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(missing_platform.status_code, 302)
+        self.assertEqual(missing_confirm.status_code, 302)
+        with site.app.app_context():
+            count = site.get_db().execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+        self.assertEqual(count, 0)
 
     def test_admin_upload_is_saved_in_activity_log(self):
         self.login()
@@ -678,6 +731,8 @@ class SiteAuthAdminTests(unittest.TestCase):
                 "title": "Activity Space",
                 "description": "Log this upload",
                 "tags": "activity",
+                "platform_support": "pc",
+                "confirm_upload": "on",
                 "file": (self.make_zip(), "activity.zip"),
             },
             content_type="multipart/form-data",
@@ -755,6 +810,8 @@ class SiteAuthAdminTests(unittest.TestCase):
                 "title": "Backup Game",
                 "description": "Backup this",
                 "tags": "backup",
+                "platform_support": "mobile",
+                "confirm_upload": "on",
                 "file": (self.make_zip(), "backup.zip"),
             },
             content_type="multipart/form-data",
@@ -800,9 +857,80 @@ class SiteAuthAdminTests(unittest.TestCase):
         finally:
             backup.close()
         self.assertEqual(saved_project["title"], "Backup Game")
+        self.assertEqual(saved_project["platform_support"], "mobile")
         self.assertEqual(saved_account["name"], "Commenter")
         self.assertEqual(saved_comment["body"], "Back this up too")
         self.assertIn("Backup Game", saved_activity["details"])
+
+    def test_admin_can_see_and_download_uploaded_source_zip(self):
+        self.login()
+        upload_response = self.client.post(
+            "/upload",
+            data={
+                "title": "Downloadable",
+                "platform_support": "pc",
+                "confirm_upload": "on",
+                "file": (self.make_zip(), "downloadable.zip"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(upload_response.status_code, 302)
+        with site.app.app_context():
+            project = site.get_db().execute(
+                "SELECT * FROM projects WHERE title = ?",
+                ("Downloadable",),
+            ).fetchone()
+
+        admin_page = self.client.get("/admin")
+        download_response = self.client.get(f"/admin/projects/{project['id']}/source.zip")
+
+        self.assertEqual(admin_page.status_code, 200)
+        self.assertIn(b"Download source ZIP", admin_page.data)
+        self.assertEqual(download_response.status_code, 200)
+        self.assertIn(b"Game", download_response.data)
+        download_response.close()
+
+    def test_admin_can_replace_uploaded_game_zip(self):
+        self.login()
+        self.client.post(
+            "/upload",
+            data={
+                "title": "Replace Me",
+                "platform_support": "pc",
+                "confirm_upload": "on",
+                "file": (self.make_zip(), "old.zip"),
+            },
+            content_type="multipart/form-data",
+        )
+        replacement = io.BytesIO()
+        with zipfile.ZipFile(replacement, "w") as zf:
+            zf.writestr("index.html", "<h1>Updated Game</h1>")
+        replacement.seek(0)
+        with site.app.app_context():
+            project = site.get_db().execute(
+                "SELECT * FROM projects WHERE title = ?",
+                ("Replace Me",),
+            ).fetchone()
+
+        response = self.client.post(
+            f"/admin/projects/{project['id']}/replace",
+            data={
+                "platform_support": "mobile_pc",
+                "confirm_upload": "on",
+                "file": (replacement, "new.zip"),
+            },
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            updated = site.get_db().execute(
+                "SELECT * FROM projects WHERE id = ?",
+                (project["id"],),
+            ).fetchone()
+        self.assertEqual(updated["platform_support"], "mobile_pc")
+        with open(os.path.join(site.PROJECTS_DIR, str(project["id"]), "index.html"), encoding="utf-8") as game_file:
+            self.assertIn("Updated Game", game_file.read())
 
     def test_admin_can_delete_project(self):
         self.login()

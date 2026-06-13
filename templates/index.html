@@ -54,12 +54,12 @@
               {% if u.picture %}
                 <img class="profile-avatar-img" src="{{ u.picture }}" alt="">
               {% else %}
-                <span class="profile-avatar">{{ (u.name or u.email or '?')[:1]|upper }}</span>
+                <span class="profile-avatar">{{ (u.name or u.username or u.email or '?')[:1]|upper }}</span>
               {% endif %}
               <span>
-                <strong>{{ u.name or u.email.split('@')[0] }}</strong>
+                <strong>{{ u.name or u.username or (u.email.split('@')[0] if u.email else 'player') }}</strong>
                 {% if is_admin %}
-                  <small>{{ u.email }}</small>
+                  <small>{{ u.email or 'No safety email' }}</small>
                 {% else %}
                   <small>{% if u.is_admin %}Admin{% else %}Regular player{% endif %}</small>
                 {% endif %}

@@ -55,10 +55,36 @@
             <div>
               <strong>{{ p.title }}</strong>
               <p class="muted">{{ p.description }}</p>
+              <p class="muted">Support: {{ p.platform_support.replace('_', ' + ') if p.platform_support else 'pc' }}</p>
+              {% if p.files %}
+                <details class="admin-files">
+                  <summary>Uploaded files ({{ p.files|length }})</summary>
+                  <ul>
+                    {% for file in p.files %}
+                      <li>{{ file }}</li>
+                    {% endfor %}
+                  </ul>
+                </details>
+              {% endif %}
             </div>
-            <form method="post" action="/admin/projects/{{ p.id }}/delete">
-              <button class="danger" type="submit">Remove</button>
-            </form>
+            <div class="admin-actions-stack">
+              {% if p.source_zip %}
+                <a class="btn" href="/admin/projects/{{ p.id }}/source.zip">Download source ZIP</a>
+              {% endif %}
+              <form method="post" action="/admin/projects/{{ p.id }}/replace" enctype="multipart/form-data" class="replace-form">
+                <select name="platform_support" required>
+                  <option value="mobile" {% if p.platform_support == 'mobile' %}selected{% endif %}>Mobile game</option>
+                  <option value="pc" {% if p.platform_support == 'pc' %}selected{% endif %}>PC game</option>
+                  <option value="mobile_pc" {% if p.platform_support == 'mobile_pc' %}selected{% endif %}>Mobile and PC</option>
+                </select>
+                <input type="file" name="file" accept=".zip" required>
+                <label class="check-row"><input name="confirm_upload" type="checkbox" required> Confirm replace</label>
+                <button type="submit">Update files</button>
+              </form>
+              <form method="post" action="/admin/projects/{{ p.id }}/delete">
+                <button class="danger" type="submit">Remove</button>
+              </form>
+            </div>
           </article>
         {% else %}
           <p class="empty">No games found.</p>
@@ -91,8 +117,8 @@
         {% for u in users %}
           <article class="admin-row">
             <div>
-              <strong>{{ u.name or u.email }}</strong>
-              <p class="muted">{{ u.email }}{% if u.is_admin %} - admin{% endif %}</p>
+              <strong>{{ u.name or u.username or u.email }}</strong>
+              <p class="muted">{{ u.username or 'no username' }}{% if u.email %} - {{ u.email }}{% endif %}{% if u.is_admin %} - admin{% endif %}</p>
             </div>
             {% if not u.is_admin %}
               <form method="post" action="/admin/users/{{ u.id }}/make-admin">

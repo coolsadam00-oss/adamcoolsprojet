@@ -96,10 +96,10 @@
                 {% if comment.picture %}
                   <img class="profile-avatar-img" src="{{ comment.picture }}" alt="">
                 {% else %}
-                  <span class="profile-avatar">{{ (comment.name or comment.email or '?')[:1]|upper }}</span>
+                  <span class="profile-avatar">{{ (comment.name or comment.username or comment.email or '?')[:1]|upper }}</span>
                 {% endif %}
                 <span>
-                  <strong>{{ comment.name or comment.email.split('@')[0] }}</strong>
+                  <strong>{{ comment.name or comment.username or (comment.email.split('@')[0] if comment.email else 'player') }}</strong>
                   <small>{% if comment.is_admin %}Admin{% else %}Regular player{% endif %}</small>
                 </span>
               </div>

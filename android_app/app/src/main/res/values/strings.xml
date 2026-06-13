@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Adam Games</string>
+    <string name="download_started">Download started</string>
+    <string name="external_link_error">Could not open this link</string>
+    <string name="file_picker_error">Could not open file picker</string>
+</resources>
