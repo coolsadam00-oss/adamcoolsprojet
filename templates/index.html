@@ -10,7 +10,10 @@
 </head>
 <body>
   <nav class="topbar">
-    <a class="brand brand-lockup" href="/"><img src="/static/site-icon.svg" alt=""> <span>{{ site_name }}</span></a>
+    <a class="brand brand-lockup" href="/">
+      <img src="/static/site-icon.svg" alt="">
+      <span><strong>{{ site_name }}</strong><small>Game hub</small></span>
+    </a>
     <div class="search">
       <form method="get" action="/">
         <input name="q" placeholder="Search games or players..." value="{{ visible_q|e }}" />
@@ -19,8 +22,8 @@
     </div>
     <div class="actions">
       {% if is_admin %}
-        <a class="btn" href="/admin">Admin</a>
-        <a class="btn" href="/upload">Upload 2D / 3D Game</a>
+        <a class="btn nav-link" href="/admin">Admin</a>
+        <a class="btn primary" href="/upload">Upload</a>
       {% endif %}
       {% if current_user %}
         <a class="profile-chip" href="/account" aria-label="Open account">
@@ -31,7 +34,7 @@
           {% endif %}
           <span class="profile-name">{{ display_name }}</span>
         </a>
-        <form method="post" action="/logout" class="inline-form"><button type="submit">Sign out</button></form>
+        <form method="post" action="/logout" class="inline-form"><button class="ghost-button" type="submit">Sign out</button></form>
       {% else %}
         <a class="btn secondary" href="/login">Sign in</a>
       {% endif %}

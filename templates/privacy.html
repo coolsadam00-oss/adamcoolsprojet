@@ -9,9 +9,12 @@
   {% if ui_accent %}<style>:root{--accent:{{ ui_accent }};}</style>{% endif %}
 </head>
 <body>
-  <nav class="topbar">
-    <a class="brand brand-lockup" href="/"><img src="/static/site-icon.svg" alt=""> <span>{{ site_name }}</span></a>
-    <div class="actions"><a class="btn" href="/">Back</a></div>
+  <nav class="topbar topbar-compact">
+    <a class="brand brand-lockup" href="/">
+      <img src="/static/site-icon.svg" alt="">
+      <span><strong>{{ site_name }}</strong><small>Safety center</small></span>
+    </a>
+    <div class="actions"><a class="btn nav-link" href="/">Games</a></div>
   </nav>
   <main class="legal-main">
     <h1>Privacy Policy</h1>

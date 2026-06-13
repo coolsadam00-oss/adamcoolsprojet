@@ -9,11 +9,14 @@
   {% if ui_accent %}<style>:root{--accent:{{ ui_accent }};}</style>{% endif %}
 </head>
 <body>
-  <nav class="topbar">
-    <a class="brand brand-lockup" href="/"><img src="/static/site-icon.svg" alt=""> <span>{{ site_name }}</span></a>
+  <nav class="topbar topbar-compact">
+    <a class="brand brand-lockup" href="/">
+      <img src="/static/site-icon.svg" alt="">
+      <span><strong>{{ site_name }}</strong><small>Game hub</small></span>
+    </a>
     <div class="actions">
-      <a class="btn" href="/">Back</a>
-      {% if is_admin %}<a class="btn" href="/admin">Admin</a>{% endif %}
+      <a class="btn nav-link" href="/">Games</a>
+      {% if is_admin %}<a class="btn nav-link" href="/admin">Admin</a>{% endif %}
       {% if current_user %}
         <a class="profile-chip" href="/account" aria-label="Open account">
           {% if current_user.picture %}
@@ -23,7 +26,7 @@
           {% endif %}
           <span class="profile-name">{{ display_name }}</span>
         </a>
-        <form method="post" action="/logout" class="inline-form"><button type="submit">Sign out</button></form>
+        <form method="post" action="/logout" class="inline-form"><button class="ghost-button" type="submit">Sign out</button></form>
       {% else %}
         <a class="btn secondary" href="/login">Sign in</a>
       {% endif %}
