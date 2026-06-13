@@ -504,6 +504,77 @@ class SiteAuthAdminTests(unittest.TestCase):
             ).fetchone()
         self.assertEqual(user["picture"], "/static/test-avatar.png")
 
+    def test_user_can_send_and_accept_friend_request(self):
+        player_id = self.login("player@example.com", "Player")
+        with site.app.app_context():
+            friend = site.upsert_user("friend@example.com", "Friend")
+
+        send_response = self.client.post(f"/friends/{friend['id']}/request")
+        with self.client.session_transaction() as session:
+            session["user_id"] = friend["id"]
+        accept_response = self.client.post(f"/friends/{player_id}/accept")
+
+        self.assertEqual(send_response.status_code, 302)
+        self.assertEqual(accept_response.status_code, 302)
+        with site.app.app_context():
+            friendship = site.get_db().execute(
+                "SELECT status FROM friendships WHERE user_id = ? AND friend_id = ?",
+                (min(player_id, friend["id"]), max(player_id, friend["id"])),
+            ).fetchone()
+        self.assertEqual(friendship["status"], "accepted")
+
+    def test_private_message_requires_friendship(self):
+        self.login("player@example.com", "Player")
+        with site.app.app_context():
+            friend = site.upsert_user("friend@example.com", "Friend")
+
+        response = self.client.post(
+            f"/messages/{friend['id']}",
+            data={"body": "hello friend"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        with site.app.app_context():
+            count = site.get_db().execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_friends_can_send_safe_private_messages(self):
+        player_id = self.login("player@example.com", "Player")
+        with site.app.app_context():
+            friend = site.upsert_user("friend@example.com", "Friend")
+            site.create_friend_request(player_id, friend["id"])
+            site.accept_friend_request(friend["id"], player_id)
+
+        response = self.client.post(
+            f"/messages/{friend['id']}",
+            data={"body": "Want to play this game?"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            message = site.get_db().execute(
+                "SELECT body FROM messages WHERE sender_id = ? AND recipient_id = ?",
+                (player_id, friend["id"]),
+            ).fetchone()
+        self.assertEqual(message["body"], "Want to play this game?")
+
+    def test_private_message_blocks_unsafe_text(self):
+        player_id = self.login("player@example.com", "Player")
+        with site.app.app_context():
+            friend = site.upsert_user("friend@example.com", "Friend")
+            site.create_friend_request(player_id, friend["id"])
+            site.accept_friend_request(friend["id"], player_id)
+
+        response = self.client.post(
+            f"/messages/{friend['id']}",
+            data={"body": "where do you live show your pics"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            count = site.get_db().execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+        self.assertEqual(count, 0)
+
     def test_user_cannot_choose_unlisted_profile_picture(self):
         user_id = self.login("player@example.com", "Player")
 
@@ -1047,6 +1118,73 @@ class SiteAuthAdminTests(unittest.TestCase):
                 (user["id"],),
             ).fetchone()
         self.assertEqual(row["is_admin"], 1)
+
+    def test_admin_can_ban_regular_user_for_duration_and_unban(self):
+        self.login()
+        with site.app.app_context():
+            user = site.upsert_user("badplayer@example.com", "Bad Player")
+
+        ban_response = self.client.post(
+            f"/admin/users/{user['id']}/ban",
+            data={"duration": "1d", "reason": "Breaking rules"},
+        )
+        with site.app.app_context():
+            active_ban = site.active_ban_for_user(user["id"])
+        unban_response = self.client.post(f"/admin/users/{user['id']}/unban")
+
+        self.assertEqual(ban_response.status_code, 302)
+        self.assertIsNotNone(active_ban)
+        self.assertEqual(unban_response.status_code, 302)
+        with site.app.app_context():
+            ban = site.get_db().execute(
+                "SELECT * FROM user_bans WHERE user_id = ? AND lifted_at IS NULL",
+                (user["id"],),
+            ).fetchone()
+        self.assertIsNone(ban)
+
+    def test_regular_admin_cannot_ban_or_demote_admins(self):
+        mod_id = self.login("mod@example.com", "Mod")
+        with site.app.app_context():
+            site.get_db().execute("UPDATE users SET is_admin = 1 WHERE id = ?", (mod_id,))
+            other_admin = site.upsert_user("otheradmin@example.com", "Other Admin")
+            site.get_db().execute("UPDATE users SET is_admin = 1 WHERE id = ?", (other_admin["id"],))
+            site.get_db().commit()
+
+        ban_response = self.client.post(
+            f"/admin/users/{other_admin['id']}/ban",
+            data={"duration": "forever", "reason": "Nope"},
+        )
+        demote_response = self.client.post(f"/admin/users/{other_admin['id']}/remove-admin")
+
+        self.assertEqual(ban_response.status_code, 403)
+        self.assertEqual(demote_response.status_code, 403)
+
+    def test_owner_can_ban_and_demote_admins(self):
+        self.login()
+        with site.app.app_context():
+            other_admin = site.upsert_user("otheradmin@example.com", "Other Admin")
+            site.get_db().execute("UPDATE users SET is_admin = 1 WHERE id = ?", (other_admin["id"],))
+            site.get_db().commit()
+
+        ban_response = self.client.post(
+            f"/admin/users/{other_admin['id']}/ban",
+            data={"duration": "forever", "reason": "Owner action"},
+        )
+        unadmin_response = self.client.post(f"/admin/users/{other_admin['id']}/remove-admin")
+
+        self.assertEqual(ban_response.status_code, 302)
+        self.assertEqual(unadmin_response.status_code, 302)
+        with site.app.app_context():
+            user = site.get_db().execute(
+                "SELECT is_admin FROM users WHERE id = ?",
+                (other_admin["id"],),
+            ).fetchone()
+            ban = site.get_db().execute(
+                "SELECT * FROM user_bans WHERE user_id = ? AND lifted_at IS NULL",
+                (other_admin["id"],),
+            ).fetchone()
+        self.assertEqual(user["is_admin"], 0)
+        self.assertIsNotNone(ban)
 
     def test_admin_can_add_profile_picture_option(self):
         self.login()

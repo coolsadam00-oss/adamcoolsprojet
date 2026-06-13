@@ -120,14 +120,57 @@
               <strong>{{ u.name or u.username or u.email }}</strong>
               <p class="muted">{{ u.username or 'no username' }}{% if u.email %} - {{ u.email }}{% endif %}{% if u.is_admin %} - admin{% endif %}</p>
             </div>
-            {% if not u.is_admin %}
-              <form method="post" action="/admin/users/{{ u.id }}/make-admin">
-                <button type="submit">Make admin</button>
+            <div class="admin-actions-stack">
+              {% if not u.is_admin %}
+                <form method="post" action="/admin/users/{{ u.id }}/make-admin">
+                  <button type="submit">Make admin</button>
+                </form>
+              {% elif current_user.email == 'coolsadam00@gmail.com' and u.email != 'coolsadam00@gmail.com' %}
+                <form method="post" action="/admin/users/{{ u.id }}/remove-admin">
+                  <button type="submit">Remove admin</button>
+                </form>
+              {% endif %}
+              {% if u.email != 'coolsadam00@gmail.com' and (not u.is_admin or current_user.email == 'coolsadam00@gmail.com') %}
+                <form method="post" action="/admin/users/{{ u.id }}/ban" class="ban-form">
+                  <select name="duration" required>
+                    <option value="1h">1 hour</option>
+                    <option value="1d">1 day</option>
+                    <option value="7d">7 days</option>
+                    <option value="30d">30 days</option>
+                    <option value="forever">Forever</option>
+                  </select>
+                  <input name="reason" maxlength="300" placeholder="Reason">
+                  <button class="danger" type="submit">Ban</button>
+                </form>
+              {% endif %}
+            </div>
+          </article>
+        {% else %}
+          <p class="empty">No users found.</p>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="admin-section">
+      <h2>Ban list</h2>
+      <div class="admin-list">
+        {% for ban in bans %}
+          <article class="admin-row">
+            <div>
+              <strong>{{ ban.name or ban.username or ban.email }}</strong>
+              <p class="muted">
+                {{ ban.reason or 'No reason' }} -
+                {% if ban.expires_at %}until {{ ban.expires_at }}{% else %}forever{% endif %}
+              </p>
+            </div>
+            {% if ban.email != 'coolsadam00@gmail.com' and (not ban.is_admin or current_user.email == 'coolsadam00@gmail.com') %}
+              <form method="post" action="/admin/users/{{ ban.user_id }}/unban">
+                <button type="submit">Unban</button>
               </form>
             {% endif %}
           </article>
         {% else %}
-          <p class="empty">No users found.</p>
+          <p class="empty">No active bans.</p>
         {% endfor %}
       </div>
     </section>

@@ -64,6 +64,11 @@
                   <small>{% if u.is_admin %}Admin{% else %}Regular player{% endif %}</small>
                 {% endif %}
               </span>
+              {% if current_user and current_user.id != u.id %}
+                <form method="post" action="/friends/{{ u.id }}/request" class="inline-form">
+                  <button type="submit">Add friend</button>
+                </form>
+              {% endif %}
             </div>
           {% endfor %}
         </div>

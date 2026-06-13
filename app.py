@@ -240,6 +240,45 @@ def init_db():
         )
         """
     )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS friendships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            friend_id INTEGER NOT NULL,
+            requested_by INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT,
+            updated_at TEXT,
+            UNIQUE(user_id, friend_id)
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_id INTEGER NOT NULL,
+            recipient_id INTEGER NOT NULL,
+            body TEXT NOT NULL,
+            created_at TEXT
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_bans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            banned_by INTEGER,
+            reason TEXT,
+            created_at TEXT,
+            expires_at TEXT,
+            lifted_at TEXT,
+            lifted_by INTEGER
+        )
+        """
+    )
     columns = {
         row["name"] for row in db.execute("PRAGMA table_info(projects)").fetchall()
     }
@@ -441,10 +480,122 @@ def is_admin():
     return bool(user and user["is_admin"])
 
 
+def is_owner(user=None):
+    user = user or current_user()
+    return bool(user and user["email"] == ADMIN_EMAIL)
+
+
 def display_name(user):
     if not user:
         return ""
     return user["name"] or user["username"] or (user["email"].split("@")[0] if user["email"] else "player")
+
+
+def user_label(user):
+    if not user:
+        return "Unknown"
+    return user["name"] or user["username"] or user["email"] or f"User {user['id']}"
+
+
+def friendship_pair(user_id, friend_id):
+    return (min(user_id, friend_id), max(user_id, friend_id))
+
+
+def create_friend_request(user_id, friend_id):
+    if user_id == friend_id:
+        raise ValueError("You cannot friend yourself.")
+    left_id, right_id = friendship_pair(user_id, friend_id)
+    now = datetime.datetime.now(datetime.UTC).isoformat()
+    get_db().execute(
+        "INSERT INTO friendships (user_id, friend_id, requested_by, status, created_at, updated_at) "
+        "VALUES (?, ?, ?, 'pending', ?, ?) "
+        "ON CONFLICT(user_id, friend_id) DO UPDATE SET "
+        "requested_by = excluded.requested_by, "
+        "status = CASE WHEN friendships.status = 'accepted' THEN 'accepted' ELSE 'pending' END, "
+        "updated_at = excluded.updated_at",
+        (left_id, right_id, user_id, now, now),
+    )
+    get_db().commit()
+
+
+def accept_friend_request(user_id, requester_id):
+    left_id, right_id = friendship_pair(user_id, requester_id)
+    row = get_db().execute(
+        "SELECT * FROM friendships WHERE user_id = ? AND friend_id = ?",
+        (left_id, right_id),
+    ).fetchone()
+    if not row or row["requested_by"] == user_id:
+        raise ValueError("No friend request from that user.")
+    get_db().execute(
+        "UPDATE friendships SET status = 'accepted', updated_at = ? "
+        "WHERE user_id = ? AND friend_id = ?",
+        (datetime.datetime.now(datetime.UTC).isoformat(), left_id, right_id),
+    )
+    get_db().commit()
+
+
+def are_friends(user_id, friend_id):
+    left_id, right_id = friendship_pair(user_id, friend_id)
+    row = get_db().execute(
+        "SELECT status FROM friendships WHERE user_id = ? AND friend_id = ?",
+        (left_id, right_id),
+    ).fetchone()
+    return bool(row and row["status"] == "accepted")
+
+
+BAD_WORDS = {
+    "fuck",
+    "shit",
+    "bitch",
+    "asshole",
+    "nigger",
+    "retard",
+}
+
+UNSAFE_MESSAGE_PATTERNS = (
+    r"\bwhere\s+(do\s+)?(you|u)\s+live\b",
+    r"\bwhat\s+is\s+your\s+address\b",
+    r"\b(show|send)\s+(me\s+)?(your\s+)?(pic|pics|picture|pictures|photo|photos)\b",
+    r"\bphone\s+number\b",
+    r"\bmeet\s+me\b",
+)
+
+
+def validate_safe_message(body):
+    text = " ".join(body.split())
+    if not text:
+        raise ValueError("Write a message first.")
+    lowered = text.lower()
+    words = set(re.findall(r"[a-z0-9']+", lowered))
+    if words & BAD_WORDS:
+        raise ValueError("That message has blocked words. Keep chat friendly.")
+    if any(re.search(pattern, lowered) for pattern in UNSAFE_MESSAGE_PATTERNS):
+        raise ValueError("Do not ask for addresses, live locations, photos, or private personal info.")
+    return text[:1000]
+
+
+def active_ban_for_user(user_id):
+    now = datetime.datetime.now(datetime.UTC).isoformat()
+    return get_db().execute(
+        "SELECT * FROM user_bans WHERE user_id = ? AND lifted_at IS NULL "
+        "AND (expires_at IS NULL OR expires_at > ?) ORDER BY id DESC LIMIT 1",
+        (user_id, now),
+    ).fetchone()
+
+
+def ban_expiry(duration):
+    if duration == "forever":
+        return None
+    days_by_duration = {
+        "1h": 1 / 24,
+        "1d": 1,
+        "7d": 7,
+        "30d": 30,
+    }
+    if duration not in days_by_duration:
+        raise ValueError("Choose a valid ban duration.")
+    expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=days_by_duration[duration])
+    return expires.isoformat()
 
 
 def log_admin_activity(action, target_type="", target_id=None, details=""):
@@ -655,6 +806,11 @@ def authenticate_password_user(identifier, password):
         return None, "Username/email or password is wrong."
     if not check_password_hash(user["password_hash"], password):
         return None, "Username/email or password is wrong."
+    ban = active_ban_for_user(user["id"])
+    if ban:
+        if ban["expires_at"]:
+            return None, f"This account is banned until {ban['expires_at']}."
+        return None, "This account is banned."
     return user, None
 
 
@@ -973,10 +1129,43 @@ def logout():
 @app.route("/account")
 @login_required
 def account():
+    user = current_user()
+    db = get_db()
     avatars = get_db().execute(
         "SELECT * FROM avatar_options ORDER BY id",
     ).fetchall()
-    return render_template("account.html", avatars=avatars)
+    pending_requests = db.execute(
+        "SELECT f.*, u.id AS other_id, u.name, u.username, u.email, u.picture "
+        "FROM friendships f JOIN users u ON u.id = f.requested_by "
+        "WHERE f.status = 'pending' AND f.requested_by != ? "
+        "AND (f.user_id = ? OR f.friend_id = ?) ORDER BY f.id DESC",
+        (user["id"], user["id"], user["id"]),
+    ).fetchall()
+    friends = db.execute(
+        "SELECT u.* FROM friendships f JOIN users u "
+        "ON u.id = CASE WHEN f.user_id = ? THEN f.friend_id ELSE f.user_id END "
+        "WHERE f.status = 'accepted' AND (f.user_id = ? OR f.friend_id = ?) "
+        "ORDER BY u.name, u.username",
+        (user["id"], user["id"], user["id"]),
+    ).fetchall()
+    messages = db.execute(
+        "SELECT m.*, s.name AS sender_name, s.username AS sender_username, "
+        "s.email AS sender_email, r.name AS recipient_name, r.username AS recipient_username, "
+        "r.email AS recipient_email "
+        "FROM messages m "
+        "JOIN users s ON s.id = m.sender_id "
+        "JOIN users r ON r.id = m.recipient_id "
+        "WHERE m.sender_id = ? OR m.recipient_id = ? "
+        "ORDER BY m.id DESC LIMIT 20",
+        (user["id"], user["id"]),
+    ).fetchall()
+    return render_template(
+        "account.html",
+        avatars=avatars,
+        pending_requests=pending_requests,
+        friends=friends,
+        messages=messages,
+    )
 
 
 @app.route("/account/profile", methods=["POST"])
@@ -1022,6 +1211,67 @@ def delete_account():
     session.clear()
     flash("Your account was deleted.")
     return redirect(url_for("index"))
+
+
+@app.route("/friends/<int:user_id>/request", methods=["POST"])
+@login_required
+def request_friend(user_id):
+    target = get_db().execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not target:
+        abort(404)
+    try:
+        create_friend_request(current_user()["id"], user_id)
+    except ValueError as error:
+        flash(str(error))
+        return redirect(url_for("account"))
+    get_db().commit()
+    flash(f"Friend request sent to {user_label(target)}.")
+    return redirect(request.referrer or url_for("account"))
+
+
+@app.route("/friends/<int:user_id>/accept", methods=["POST"])
+@login_required
+def accept_friend(user_id):
+    requester = get_db().execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not requester:
+        abort(404)
+    try:
+        accept_friend_request(current_user()["id"], user_id)
+    except ValueError as error:
+        flash(str(error))
+        return redirect(url_for("account"))
+    get_db().commit()
+    flash(f"You are now friends with {user_label(requester)}.")
+    return redirect(url_for("account"))
+
+
+@app.route("/messages/<int:user_id>", methods=["POST"])
+@login_required
+def send_message(user_id):
+    recipient = get_db().execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not recipient:
+        abort(404)
+    if not are_friends(current_user()["id"], user_id):
+        abort(403)
+    try:
+        body = validate_safe_message(request.form.get("body", ""))
+    except ValueError as error:
+        flash(str(error))
+        return redirect(url_for("account"))
+    get_db().execute(
+        "INSERT INTO messages (sender_id, recipient_id, body, created_at) "
+        "VALUES (?, ?, ?, ?)",
+        (
+            current_user()["id"],
+            user_id,
+            body,
+            datetime.datetime.now(datetime.UTC).isoformat(),
+        ),
+    )
+    log_player_activity("send_friend_message", None, f"Sent message to {user_label(recipient)}")
+    get_db().commit()
+    flash("Message sent.")
+    return redirect(url_for("account"))
 
 
 @app.route("/upload", methods=["GET", "POST"])
@@ -1354,6 +1604,14 @@ def admin_panel():
     avatars = db.execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall()
     activities = recent_admin_activity()
     player_activities = recent_player_activity()
+    bans = db.execute(
+        "SELECT b.*, u.name, u.username, u.email, u.is_admin, admin.name AS banned_by_name, "
+        "admin.username AS banned_by_username, admin.email AS banned_by_email "
+        "FROM user_bans b JOIN users u ON u.id = b.user_id "
+        "LEFT JOIN users admin ON admin.id = b.banned_by "
+        "WHERE b.lifted_at IS NULL "
+        "ORDER BY b.id DESC",
+    ).fetchall()
     return render_template(
         "admin.html",
         projects=projects,
@@ -1361,6 +1619,7 @@ def admin_panel():
         avatars=avatars,
         activities=activities,
         player_activities=player_activities,
+        bans=bans,
         q=q,
         lulu_message=None,
     )
@@ -1408,6 +1667,94 @@ def make_admin(user_id):
     return redirect(url_for("admin_panel"))
 
 
+def ensure_can_moderate_user(target):
+    if target["email"] == ADMIN_EMAIL:
+        abort(403)
+    if target["is_admin"] and not is_owner():
+        abort(403)
+
+
+@app.route("/admin/users/<int:user_id>/remove-admin", methods=["POST"])
+@admin_required
+def remove_admin(user_id):
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not user:
+        abort(404)
+    if not is_owner() or user["email"] == ADMIN_EMAIL:
+        abort(403)
+    db.execute("UPDATE users SET is_admin = 0 WHERE id = ?", (user_id,))
+    log_admin_activity(
+        "remove_admin",
+        "user",
+        user_id,
+        f"Removed admin: {user_label(user)}",
+    )
+    db.commit()
+    flash("Admin access removed.")
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/users/<int:user_id>/ban", methods=["POST"])
+@admin_required
+def ban_user(user_id):
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not user:
+        abort(404)
+    ensure_can_moderate_user(user)
+    try:
+        expires_at = ban_expiry(request.form.get("duration", ""))
+    except ValueError as error:
+        flash(str(error))
+        return redirect(url_for("admin_panel"))
+    reason = " ".join(request.form.get("reason", "").split())[:300]
+    db.execute(
+        "INSERT INTO user_bans (user_id, banned_by, reason, created_at, expires_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (
+            user_id,
+            current_user()["id"],
+            reason,
+            datetime.datetime.now(datetime.UTC).isoformat(),
+            expires_at,
+        ),
+    )
+    log_admin_activity(
+        "ban_user",
+        "user",
+        user_id,
+        f"Banned {user_label(user)}: {reason or 'No reason'}",
+    )
+    db.commit()
+    flash("User banned.")
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/users/<int:user_id>/unban", methods=["POST"])
+@admin_required
+def unban_user(user_id):
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not user:
+        abort(404)
+    ensure_can_moderate_user(user)
+    db.execute(
+        "UPDATE user_bans SET lifted_at = ?, lifted_by = ? "
+        "WHERE user_id = ? AND lifted_at IS NULL",
+        (datetime.datetime.now(datetime.UTC).isoformat(), current_user()["id"], user_id),
+    )
+    log_admin_activity(
+        "unban_user",
+        "user",
+        user_id,
+        f"Unbanned {user_label(user)}",
+    )
+    db.commit()
+    flash("User unbanned.")
+    return redirect(url_for("admin_panel"))
+
+
 @app.route("/admin/avatars", methods=["POST"])
 @admin_required
 def add_avatar():
@@ -1452,6 +1799,10 @@ def lulu():
             avatars=get_db().execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall(),
             activities=recent_admin_activity(),
             player_activities=recent_player_activity(),
+            bans=get_db().execute(
+                "SELECT b.*, u.name, u.username, u.email, u.is_admin FROM user_bans b "
+                "JOIN users u ON u.id = b.user_id WHERE b.lifted_at IS NULL ORDER BY b.id DESC"
+            ).fetchall(),
             q="",
             lulu_message=error,
         ), 400
@@ -1464,6 +1815,10 @@ def lulu():
         avatars=get_db().execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall(),
         activities=recent_admin_activity(),
         player_activities=recent_player_activity(),
+        bans=get_db().execute(
+            "SELECT b.*, u.name, u.username, u.email, u.is_admin FROM user_bans b "
+            "JOIN users u ON u.id = b.user_id WHERE b.lifted_at IS NULL ORDER BY b.id DESC"
+        ).fetchall(),
         q="",
         lulu_message=message,
     )

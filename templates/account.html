@@ -62,6 +62,61 @@
         </fieldset>
         <button type="submit">Save profile</button>
       </form>
+      <section class="profile-form">
+        <h2>Friends</h2>
+        {% if pending_requests %}
+          <h3>Friend requests</h3>
+          <div class="admin-list">
+            {% for request in pending_requests %}
+              <article class="admin-row">
+                <div>
+                  <strong>{{ request.name or request.username or request.email }}</strong>
+                  <p class="muted">wants to be friends</p>
+                </div>
+                <form method="post" action="/friends/{{ request.other_id }}/accept">
+                  <button type="submit">Accept</button>
+                </form>
+              </article>
+            {% endfor %}
+          </div>
+        {% endif %}
+        <div class="admin-list">
+          {% for friend in friends %}
+            <article class="admin-row">
+              <div>
+                <strong>{{ friend.name or friend.username or friend.email }}</strong>
+                <p class="muted">Friend</p>
+              </div>
+              <form method="post" action="/messages/{{ friend.id }}" class="friend-message-form">
+                <input name="body" maxlength="1000" placeholder="Send a safe message..." required>
+                <button type="submit">Send</button>
+              </form>
+            </article>
+          {% else %}
+            <p class="empty">Search for players and add them as friends before messaging.</p>
+          {% endfor %}
+        </div>
+      </section>
+      <section class="profile-form">
+        <h2>Messages</h2>
+        <div class="admin-list">
+          {% for message in messages %}
+            <article class="admin-row">
+              <div>
+                <strong>
+                  {{ message.sender_name or message.sender_username or message.sender_email }}
+                  to
+                  {{ message.recipient_name or message.recipient_username or message.recipient_email }}
+                </strong>
+                <p>{{ message.body }}</p>
+                <p class="muted">{{ message.created_at }}</p>
+              </div>
+            </article>
+          {% else %}
+            <p class="empty">No messages yet.</p>
+          {% endfor %}
+        </div>
+      </section>
       <form method="post" action="/account/delete" class="danger-zone">
         <h2>Delete account</h2>
         <p>This removes your account and signs you out. It does not remove games from the website.</p>
