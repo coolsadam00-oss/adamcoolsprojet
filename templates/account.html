@@ -9,14 +9,11 @@
   {% if ui_accent %}<style>:root{--accent:{{ ui_accent }};}</style>{% endif %}
 </head>
 <body>
-  <nav class="topbar topbar-compact">
-    <a class="brand brand-lockup" href="/">
-      <img src="/static/site-icon.svg" alt="">
-      <span><strong>{{ site_name }}</strong><small>Player profile</small></span>
-    </a>
+  <nav class="topbar">
+    <a class="brand brand-lockup" href="/"><img src="/static/site-icon.svg" alt=""> <span>{{ site_name }}</span></a>
     <div class="actions">
-      <a class="btn nav-link" href="/">Games</a>
-      <form method="post" action="/logout" class="inline-form"><button class="ghost-button" type="submit">Sign out</button></form>
+      <a class="btn" href="/">Back</a>
+      <form method="post" action="/logout" class="inline-form"><button type="submit">Sign out</button></form>
     </div>
   </nav>
 
