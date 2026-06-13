@@ -225,6 +225,21 @@ def init_db():
         )
         """
     )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS player_activity (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            visitor_id TEXT,
+            project_id INTEGER,
+            action TEXT NOT NULL,
+            details TEXT,
+            ip_address TEXT,
+            user_agent TEXT,
+            created_at TEXT
+        )
+        """
+    )
     columns = {
         row["name"] for row in db.execute("PRAGMA table_info(projects)").fetchall()
     }
@@ -341,7 +356,12 @@ def close_db(exc):
 
 @app.after_request
 def backup_after_successful_change(response):
-    if request.method == "POST" and response.status_code < 400:
+    skip_endpoints = {"project_heartbeat"}
+    if (
+        request.method == "POST"
+        and response.status_code < 400
+        and request.endpoint not in skip_endpoints
+    ):
         try:
             backup_database(request.endpoint or "post")
         except Exception as error:
@@ -442,6 +462,49 @@ def log_admin_activity(action, target_type="", target_id=None, details=""):
             datetime.datetime.now(datetime.UTC).isoformat(),
         ),
     )
+
+
+def visitor_id():
+    if "visitor_id" not in session:
+        session["visitor_id"] = secrets.token_urlsafe(16)
+    return session["visitor_id"]
+
+
+def request_ip():
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()[:80]
+    return (request.remote_addr or "")[:80]
+
+
+def log_player_activity(action, project_id=None, details=""):
+    user = current_user()
+    get_db().execute(
+        "INSERT INTO player_activity "
+        "(user_id, visitor_id, project_id, action, details, ip_address, user_agent, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            user["id"] if user else None,
+            visitor_id(),
+            project_id,
+            action[:80],
+            details[:500],
+            request_ip(),
+            request.headers.get("User-Agent", "")[:300],
+            datetime.datetime.now(datetime.UTC).isoformat(),
+        ),
+    )
+
+
+def recent_player_activity(limit=40):
+    return get_db().execute(
+        "SELECT pa.*, u.name, u.username, u.email, p.title AS project_title "
+        "FROM player_activity pa "
+        "LEFT JOIN users u ON u.id = pa.user_id "
+        "LEFT JOIN projects p ON p.id = pa.project_id "
+        "ORDER BY pa.id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
 
 
 def recent_admin_activity(limit=20):
@@ -740,6 +803,8 @@ def login():
         session.clear()
         session.permanent = request.form.get("remember_device") == "on"
         session["user_id"] = user["id"]
+        log_player_activity("login", details=f"Signed in as {display_name(user)}")
+        get_db().commit()
         return redirect(safe_next_url(request.form.get("next")))
 
     return render_template(
@@ -1055,6 +1120,12 @@ def view_project(pid):
                 break
         if found:
             break
+    log_player_activity(
+        "open_game_page",
+        pid,
+        f"Opened game page: {project['title']}",
+    )
+    db.commit()
 
     return render_template(
         "view.html",
@@ -1063,6 +1134,21 @@ def view_project(pid):
         user_rating=user_rating,
         comments=comments,
     )
+
+
+@app.route("/project/<int:pid>/heartbeat", methods=["POST"])
+def project_heartbeat(pid):
+    db = get_db()
+    project = db.execute("SELECT title FROM projects WHERE id = ?", (pid,)).fetchone()
+    if not project:
+        abort(404)
+    log_player_activity(
+        "active_play",
+        pid,
+        f"Playing {project['title']}",
+    )
+    db.commit()
+    return ("", 204)
 
 
 @app.route("/project/<int:pid>/rate", methods=["POST"])
@@ -1087,6 +1173,7 @@ def rate_project(pid):
         "score = excluded.score, updated_at = excluded.updated_at",
         (pid, current_user()["id"], score, now, now),
     )
+    log_player_activity("rate_game", pid, f"Rated game {score}/5")
     db.commit()
     flash("Rating saved.")
     return redirect(url_for("view_project", pid=pid))
@@ -1114,6 +1201,7 @@ def add_comment(pid):
             datetime.datetime.now(datetime.UTC).isoformat(),
         ),
     )
+    log_player_activity("comment_game", pid, "Posted a comment")
     db.commit()
     flash("Comment posted.")
     return redirect(url_for("view_project", pid=pid))
@@ -1265,12 +1353,14 @@ def admin_panel():
         project["files"] = project_file_list(project["id"])
     avatars = db.execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall()
     activities = recent_admin_activity()
+    player_activities = recent_player_activity()
     return render_template(
         "admin.html",
         projects=projects,
         users=users,
         avatars=avatars,
         activities=activities,
+        player_activities=player_activities,
         q=q,
         lulu_message=None,
     )
@@ -1361,6 +1451,7 @@ def lulu():
             users=get_db().execute("SELECT * FROM users ORDER BY last_login DESC").fetchall(),
             avatars=get_db().execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall(),
             activities=recent_admin_activity(),
+            player_activities=recent_player_activity(),
             q="",
             lulu_message=error,
         ), 400
@@ -1372,6 +1463,7 @@ def lulu():
         users=get_db().execute("SELECT * FROM users ORDER BY last_login DESC").fetchall(),
         avatars=get_db().execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall(),
         activities=recent_admin_activity(),
+        player_activities=recent_player_activity(),
         q="",
         lulu_message=message,
     )

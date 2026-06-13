@@ -117,6 +117,22 @@
       </div>
     </section>
   </main>
+  <script>
+    (function () {
+      var heartbeatUrl = "/project/{{ project.id }}/heartbeat";
+      function sendHeartbeat() {
+        if (document.visibilityState === "hidden") return;
+        fetch(heartbeatUrl, {
+          method: "POST",
+          credentials: "same-origin",
+          keepalive: true
+        }).catch(function () {});
+      }
+      sendHeartbeat();
+      setInterval(sendHeartbeat, 30000);
+      document.addEventListener("visibilitychange", sendHeartbeat);
+    }());
+  </script>
   <script src="/static/theme.js"></script>
 </body>
 </html>

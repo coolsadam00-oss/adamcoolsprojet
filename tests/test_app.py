@@ -98,6 +98,85 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Guest Game", response.data)
 
+    def test_project_view_logs_player_monitoring_activity(self):
+        self.login("player@example.com", "Player")
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Watched Game", "", "", "1", "now"),
+            )
+            db.commit()
+            project_id = cur.lastrowid
+            folder = os.path.join(site.PROJECTS_DIR, str(project_id))
+            os.makedirs(folder, exist_ok=True)
+            with open(os.path.join(folder, "index.html"), "w", encoding="utf-8") as f:
+                f.write("<h1>Watched Game</h1>")
+
+        response = self.client.get(f"/project/{project_id}")
+
+        self.assertEqual(response.status_code, 200)
+        with site.app.app_context():
+            activity = site.get_db().execute(
+                "SELECT * FROM player_activity WHERE project_id = ? ORDER BY id DESC LIMIT 1",
+                (project_id,),
+            ).fetchone()
+        self.assertEqual(activity["action"], "open_game_page")
+        self.assertIn("Watched Game", activity["details"])
+
+    def test_play_heartbeat_records_active_play_without_database_backup(self):
+        self.login("player@example.com", "Player")
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Heartbeat Game", "", "", "1", "now"),
+            )
+            db.commit()
+            project_id = cur.lastrowid
+
+        response = self.client.post(f"/project/{project_id}/heartbeat")
+
+        self.assertEqual(response.status_code, 204)
+        with site.app.app_context():
+            activity = site.get_db().execute(
+                "SELECT * FROM player_activity WHERE project_id = ? ORDER BY id DESC LIMIT 1",
+                (project_id,),
+            ).fetchone()
+        self.assertEqual(activity["action"], "active_play")
+        self.assertFalse(os.listdir(site.BACKUPS_DIR))
+
+    def test_admin_panel_shows_player_monitoring_only_to_admins(self):
+        player_id = self.login("player@example.com", "Player")
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Monitor Game", "", "", "1", "now"),
+            )
+            project_id = cur.lastrowid
+            db.execute(
+                "INSERT INTO player_activity "
+                "(user_id, visitor_id, project_id, action, details, ip_address, user_agent, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (player_id, "visitor-1", project_id, "active_play", "Playing Monitor Game", "127.0.0.1", "Test Browser", "now"),
+            )
+            db.commit()
+
+        regular_page = self.client.get("/admin")
+        self.login()
+        admin_page = self.client.get("/admin")
+
+        self.assertEqual(regular_page.status_code, 403)
+        self.assertEqual(admin_page.status_code, 200)
+        self.assertIn(b"Player monitoring", admin_page.data)
+        self.assertIn(b"Player", admin_page.data)
+        self.assertIn(b"Monitor Game", admin_page.data)
+        self.assertIn(b"active play", admin_page.data)
+
     def test_seed_admin_email_is_admin(self):
         with site.app.app_context():
             user = site.upsert_user(email=ADMIN_EMAIL, name="Adam")
