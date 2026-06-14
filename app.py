@@ -22,6 +22,7 @@ from flask import (
     abort,
     flash,
     session,
+    jsonify,
 )
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -1060,6 +1061,25 @@ def index():
         q=q,
         visible_q=visible_q,
     )
+
+
+@app.route("/search/suggestions")
+def search_suggestions():
+    q = " ".join(request.args.get("q", "").split())[:60]
+    db = get_db()
+    if q:
+        like = f"%{q}%"
+        rows = db.execute(
+            "SELECT title FROM projects "
+            "WHERE title LIKE ? OR description LIKE ? OR tags LIKE ? "
+            "ORDER BY CASE WHEN title LIKE ? THEN 0 ELSE 1 END, id DESC LIMIT 6",
+            (like, like, like, f"{q}%"),
+        ).fetchall()
+    else:
+        rows = db.execute(
+            "SELECT title FROM projects ORDER BY id DESC LIMIT 6",
+        ).fetchall()
+    return jsonify({"suggestions": [row["title"] for row in rows if row["title"]]})
 
 
 @app.route("/login", methods=["GET", "POST"])

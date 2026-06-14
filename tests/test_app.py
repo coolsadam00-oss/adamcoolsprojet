@@ -78,6 +78,33 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Sign in", response.data)
 
+    def test_home_search_has_game_suggestions_ui(self):
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'list="gameSuggestions"', response.data)
+        self.assertIn(b'id="gameSuggestions"', response.data)
+
+    def test_search_suggestions_returns_similar_game_titles(self):
+        with site.app.app_context():
+            db = site.get_db()
+            db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Space Runner", "Fast space game", "space,arcade", "1", "now"),
+            )
+            db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Puzzle Garden", "Calm puzzle game", "puzzle", "2", "now"),
+            )
+            db.commit()
+
+        response = self.client.get("/search/suggestions?q=spa")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"suggestions": ["Space Runner"]})
+
     def test_guest_can_view_project(self):
         with site.app.app_context():
             db = site.get_db()

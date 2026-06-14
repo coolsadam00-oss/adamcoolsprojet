@@ -13,7 +13,8 @@
     <a class="brand brand-lockup" href="/"><img src="/static/site-icon.svg" alt=""> <span>{{ site_name }}</span></a>
     <div class="search">
       <form method="get" action="/">
-        <input name="q" placeholder="Search games or players..." value="{{ visible_q|e }}" />
+        <input id="searchInput" name="q" list="gameSuggestions" placeholder="Search games or players..." value="{{ visible_q|e }}" autocomplete="off" />
+        <datalist id="gameSuggestions"></datalist>
         <button type="submit">Search</button>
       </form>
     </div>
@@ -114,6 +115,34 @@
     <div class="footer-inner">{{ site_name }} — simple game gallery • Upload responsibly</div>
     <div class="footer-inner"><a href="/terms">Website Rules</a> - <a href="/privacy">Privacy Policy</a></div>
   </footer>
+  <script>
+    (function () {
+      var input = document.getElementById("searchInput");
+      var suggestions = document.getElementById("gameSuggestions");
+      if (!input || !suggestions || !window.fetch) return;
+      var timer;
+      function updateSuggestions() {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          fetch("/search/suggestions?q=" + encodeURIComponent(input.value), {
+            credentials: "same-origin"
+          })
+            .then(function (response) { return response.ok ? response.json() : {suggestions: []}; })
+            .then(function (data) {
+              suggestions.innerHTML = "";
+              (data.suggestions || []).forEach(function (title) {
+                var option = document.createElement("option");
+                option.value = title;
+                suggestions.appendChild(option);
+              });
+            })
+            .catch(function () {});
+        }, 120);
+      }
+      input.addEventListener("input", updateSuggestions);
+      updateSuggestions();
+    }());
+  </script>
   <script src="/static/theme.js"></script>
 </body>
 </html>
