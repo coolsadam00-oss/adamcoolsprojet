@@ -923,35 +923,6 @@ PLATFORM_OPTIONS = {
     "mobile_pc": "Mobile and PC supported",
 }
 
-LANGUAGE_OPTIONS = {
-    "html": {
-        "label": "HTML / index game",
-        "extensions": {".html", ".htm", ".css", ".js", ".json", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".mp3", ".wav", ".ogg", ".wasm"},
-        "default_entry": "index.html",
-    },
-    "python": {
-        "label": "Python",
-        "extensions": {".py", ".txt", ".md", ".json"},
-        "default_entry": "main.py",
-    },
-    "java": {
-        "label": "Java",
-        "extensions": {".java", ".txt", ".md", ".json"},
-        "default_entry": "Main.java",
-    },
-    "c": {
-        "label": "C",
-        "extensions": {".c", ".h", ".txt", ".md", ".json"},
-        "default_entry": "main.c",
-    },
-    "cpp": {
-        "label": "C++",
-        "extensions": {".cpp", ".cc", ".cxx", ".hpp", ".h", ".txt", ".md", ".json"},
-        "default_entry": "main.cpp",
-    },
-}
-
-
 def validate_platform_support(value):
     value = value.strip()
     if value not in PLATFORM_OPTIONS:
@@ -959,44 +930,41 @@ def validate_platform_support(value):
     return value
 
 
-def validate_runtime_language(value):
-    value = (value or "html").strip().lower()
-    if value not in LANGUAGE_OPTIONS:
-        raise ValueError("Choose HTML, Python, Java, C, or C++.")
-    return value
+HTML_UPLOAD_EXTENSIONS = {
+    ".html",
+    ".htm",
+    ".css",
+    ".js",
+    ".json",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".svg",
+    ".mp3",
+    ".wav",
+    ".ogg",
+    ".wasm",
+}
 
 
-def clean_entry_file(value, language):
-    value = (value or LANGUAGE_OPTIONS[language]["default_entry"]).replace("\\", "/").strip()
-    value = value.lstrip("/")
-    if not value or ".." in value.split("/"):
-        raise ValueError("Choose a safe entry file name.")
-    normalized = os.path.normpath(value).replace("\\", "/")
-    if normalized.startswith("../") or normalized == "..":
-        raise ValueError("Choose a safe entry file name.")
-    ext = os.path.splitext(normalized.lower())[1]
-    if ext not in LANGUAGE_OPTIONS[language]["extensions"]:
-        raise ValueError("The entry file extension does not match the selected language.")
-    return normalized
-
-
-def validate_project_files(folder, language, entry_file):
-    entry_path = os.path.abspath(os.path.join(folder, entry_file))
+def validate_project_files(folder):
+    entry_path = os.path.abspath(os.path.join(folder, "index.html"))
     folder_abs = os.path.abspath(folder)
     if os.path.commonpath([entry_path, folder_abs]) != folder_abs or not os.path.exists(entry_path):
-        raise ValueError(f"Your upload must include {entry_file}.")
-    allowed = LANGUAGE_OPTIONS[language]["extensions"]
+        raise ValueError("Your upload must include index.html.")
     for root, dirs, files in os.walk(folder):
         dirs[:] = [name for name in dirs if not name.startswith(".")]
         for name in files:
             if name == "source.zip":
                 continue
             ext = os.path.splitext(name.lower())[1]
-            if ext and ext not in allowed:
-                raise ValueError(f"{name} is not allowed for {LANGUAGE_OPTIONS[language]['label']} uploads.")
+            if ext and ext not in HTML_UPLOAD_EXTENSIONS:
+                raise ValueError(f"{name} is not allowed for HTML game uploads.")
 
 
-def save_and_extract_game_zip(file, folder, language="html", entry_file="index.html"):
+def save_and_extract_game_zip(file, folder):
     if not file:
         raise ValueError("Please choose a zip file containing your project (HTML/CSS/JS).")
     if not file.filename.lower().endswith(".zip"):
@@ -1006,25 +974,7 @@ def save_and_extract_game_zip(file, folder, language="html", entry_file="index.h
     file.save(zip_path)
     with zipfile.ZipFile(zip_path, "r") as zf:
         safe_extract_zip(zf, folder)
-    validate_project_files(folder, language, entry_file)
-    return "source.zip"
-
-
-def save_code_as_project_zip(code, folder, language, entry_file):
-    code = code or ""
-    if not code.strip():
-        raise ValueError("Write code before creating the upload.")
-    os.makedirs(folder, exist_ok=True)
-    entry_path = os.path.abspath(os.path.join(folder, entry_file))
-    folder_abs = os.path.abspath(folder)
-    if os.path.commonpath([entry_path, folder_abs]) != folder_abs:
-        raise ValueError("Choose a safe entry file name.")
-    os.makedirs(os.path.dirname(entry_path), exist_ok=True)
-    with open(entry_path, "w", encoding="utf-8", newline="\n") as source_file:
-        source_file.write(code[:500000])
-    zip_path = os.path.join(folder, "source.zip")
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.write(entry_path, entry_file)
+    validate_project_files(folder)
     return "source.zip"
 
 
@@ -1466,8 +1416,6 @@ def upload():
         file = request.files.get("file")
         try:
             platform_support = validate_platform_support(request.form.get("platform_support", ""))
-            runtime_language = validate_runtime_language(request.form.get("runtime_language", "html"))
-            entry_file = clean_entry_file("", runtime_language)
         except ValueError as error:
             flash(str(error))
             return redirect(request.url)
@@ -1492,8 +1440,8 @@ def upload():
                 platform_support,
                 "",
                 source_token,
-                runtime_language,
-                entry_file,
+                "html",
+                "index.html",
             ),
         )
         db.commit()
@@ -1501,7 +1449,7 @@ def upload():
         folder = os.path.join(PROJECTS_DIR, str(pid))
 
         try:
-            source_zip = save_and_extract_game_zip(file, folder, runtime_language, entry_file)
+            source_zip = save_and_extract_game_zip(file, folder)
             thumbnail = save_thumbnail(request.files.get("thumbnail"), folder)
         except Exception as e:
             if os.path.isdir(folder):
@@ -1519,18 +1467,14 @@ def upload():
             "upload_project",
             "project",
             pid,
-            f"Uploaded {runtime_language} project: {title}",
+            f"Uploaded game: {title}",
         )
         db.commit()
 
         flash("Project uploaded successfully.")
         return redirect(url_for("index"))
 
-    return render_template(
-        "upload.html",
-        platform_options=PLATFORM_OPTIONS,
-        language_options=LANGUAGE_OPTIONS,
-    )
+    return render_template("upload.html", platform_options=PLATFORM_OPTIONS)
 
 
 @app.route("/project/<int:pid>")
@@ -1569,17 +1513,16 @@ def view_project(pid):
 
     # find index.html inside folder
     folder = os.path.join(PROJECTS_DIR, str(pid))
-    index_candidates = [project.get("entry_file") or "index.html", "index.html", "index.htm", "game.html"]
+    index_candidates = ["index.html", "index.htm", "game.html"]
     found = None
-    if (project.get("runtime_language") or "html") == "html":
-        for root, dirs, files in os.walk(folder):
-            for cand in index_candidates:
-                if cand in files:
-                    rel = os.path.relpath(os.path.join(root, cand), folder)
-                    found = rel.replace("\\", "/")
-                    break
-            if found:
+    for root, dirs, files in os.walk(folder):
+        for cand in index_candidates:
+            if cand in files:
+                rel = os.path.relpath(os.path.join(root, cand), folder)
+                found = rel.replace("\\", "/")
                 break
+        if found:
+            break
     log_player_activity(
         "open_game_page",
         pid,
@@ -1790,8 +1733,6 @@ def replace_project_source(pid):
         abort(404)
     try:
         platform_support = validate_platform_support(request.form.get("platform_support", ""))
-        runtime_language = validate_runtime_language(request.form.get("runtime_language", project["runtime_language"] or "html"))
-        entry_file = clean_entry_file("", runtime_language)
     except ValueError as error:
         flash(str(error))
         return redirect(url_for("admin_panel"))
@@ -1811,7 +1752,7 @@ def replace_project_source(pid):
         shutil.rmtree(folder)
     os.makedirs(folder, exist_ok=True)
     try:
-        source_zip = save_and_extract_game_zip(request.files.get("file"), folder, runtime_language, entry_file)
+        source_zip = save_and_extract_game_zip(request.files.get("file"), folder)
     except Exception as error:
         if os.path.isdir(folder):
             shutil.rmtree(folder)
@@ -1823,8 +1764,8 @@ def replace_project_source(pid):
     if os.path.isdir(backup_folder):
         shutil.rmtree(backup_folder)
     db.execute(
-        "UPDATE projects SET platform_support = ?, source_zip = ?, runtime_language = ?, entry_file = ? WHERE id = ?",
-        (platform_support, source_zip, runtime_language, entry_file, pid),
+        "UPDATE projects SET platform_support = ?, source_zip = ?, runtime_language = 'html', entry_file = 'index.html' WHERE id = ?",
+        (platform_support, source_zip, pid),
     )
     log_admin_activity(
         "replace_project_zip",

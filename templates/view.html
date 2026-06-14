@@ -76,7 +76,7 @@
       <p><a class="btn small" href="/project_files/{{ project.id }}/{{ index_file }}" target="_blank">Open in new tab</a></p>
       <div class="iframe-wrap"><iframe src="/project_files/{{ project.id }}/{{ index_file }}"></iframe></div>
     {% else %}
-      <p>This upload is saved as {{ project.runtime_language or 'source' }} source code. Admins can download the private source ZIP from the admin panel.</p>
+      <p>No index.html found in this project.</p>
     {% endif %}
 
     <section class="comments-panel" aria-label="Game comments">

@@ -250,7 +250,7 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertIn(b"Upload a 2D or 3D game", response.data)
         self.assertIn(b"2D or 3D HTML5 game ZIP", response.data)
         self.assertIn(b"Upload 2D / 3D Game", response.data)
-        self.assertIn(b"Language", response.data)
+        self.assertNotIn(b"Language", response.data)
         self.assertNotIn(b"Upload type", response.data)
         self.assertNotIn(b"Write code", response.data)
         self.assertNotIn(b"Entry file", response.data)
@@ -1056,7 +1056,6 @@ class SiteAuthAdminTests(unittest.TestCase):
                 "title": "Private Source",
                 "platform_support": "pc",
                 "confirm_upload": "on",
-                "runtime_language": "html",
                 "file": (self.make_zip(), "private.zip"),
             },
             content_type="multipart/form-data",
@@ -1076,39 +1075,6 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(blocked_response.status_code, 404)
         self.assertIn(b"Security warnings", admin_page.data)
         self.assertIn(b"Blocked public source ZIP request", admin_page.data)
-
-    def test_admin_can_upload_python_source_zip_with_language_choice(self):
-        self.login()
-
-        response = self.client.post(
-            "/upload",
-            data={
-                "title": "Python Tool",
-                "description": "Source only",
-                "tags": "python",
-                "platform_support": "pc",
-                "confirm_upload": "on",
-                "runtime_language": "python",
-                "file": (self.make_zip("main.py", "print('hello')"), "python-tool.zip"),
-            },
-            content_type="multipart/form-data",
-        )
-
-        self.assertEqual(response.status_code, 302)
-        with site.app.app_context():
-            project = site.get_db().execute(
-                "SELECT * FROM projects WHERE title = ?",
-                ("Python Tool",),
-            ).fetchone()
-        self.assertEqual(project["runtime_language"], "python")
-        self.assertEqual(project["entry_file"], "main.py")
-        self.assertTrue(project["source_token"])
-        self.assertTrue(
-            os.path.exists(os.path.join(site.PROJECTS_DIR, str(project["id"]), "main.py"))
-        )
-        self.assertTrue(
-            os.path.exists(os.path.join(site.PROJECTS_DIR, str(project["id"]), project["source_zip"]))
-        )
 
     def test_signed_in_user_can_favorite_game_and_see_it_on_account(self):
         user_id = self.login("player@example.com", "Player")
