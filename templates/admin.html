@@ -56,6 +56,7 @@
               <strong>{{ p.title }}</strong>
               <p class="muted">{{ p.description }}</p>
               <p class="muted">Support: {{ p.platform_support.replace('_', ' + ') if p.platform_support else 'pc' }}</p>
+              <p class="muted">Language: {{ p.runtime_language or 'html' }} - Entry: {{ p.entry_file or 'index.html' }}</p>
               {% if p.files %}
                 <details class="admin-files">
                   <summary>Uploaded files ({{ p.files|length }})</summary>
@@ -69,7 +70,7 @@
             </div>
             <div class="admin-actions-stack">
               {% if p.source_zip %}
-                <a class="btn" href="/admin/projects/{{ p.id }}/source.zip">Download source ZIP</a>
+                <a class="btn" href="/admin/projects/{{ p.id }}/source/{{ p.source_token }}.zip">Download source ZIP</a>
               {% endif %}
               <form method="post" action="/admin/projects/{{ p.id }}/replace" enctype="multipart/form-data" class="replace-form">
                 <select name="platform_support" required>
@@ -77,6 +78,14 @@
                   <option value="pc" {% if p.platform_support == 'pc' %}selected{% endif %}>PC game</option>
                   <option value="mobile_pc" {% if p.platform_support == 'mobile_pc' %}selected{% endif %}>Mobile and PC</option>
                 </select>
+                <select name="runtime_language" required>
+                  <option value="html" {% if p.runtime_language == 'html' %}selected{% endif %}>HTML / index game</option>
+                  <option value="python" {% if p.runtime_language == 'python' %}selected{% endif %}>Python</option>
+                  <option value="java" {% if p.runtime_language == 'java' %}selected{% endif %}>Java</option>
+                  <option value="c" {% if p.runtime_language == 'c' %}selected{% endif %}>C</option>
+                  <option value="cpp" {% if p.runtime_language == 'cpp' %}selected{% endif %}>C++</option>
+                </select>
+                <input name="entry_file" value="{{ p.entry_file or 'index.html' }}" required>
                 <input type="file" name="file" accept=".zip" required>
                 <label class="check-row"><input name="confirm_upload" type="checkbox" required> Confirm replace</label>
                 <button type="submit">Update files</button>
@@ -88,6 +97,27 @@
           </article>
         {% else %}
           <p class="empty">No games found.</p>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="admin-section">
+      <h2>Security warnings</h2>
+      <div class="admin-list">
+        {% for alert in security_alerts %}
+          <article class="admin-row">
+            <div>
+              <strong>{{ alert.action }}</strong>
+              <p class="muted">
+                Sus user: {{ alert.name or alert.username or alert.email or ('Guest ' ~ alert.visitor_id[:8]) }}
+                {% if alert.project_title %} - Project: {{ alert.project_title }}{% endif %}
+              </p>
+              <p class="muted">{{ alert.details }} - {{ alert.created_at }}</p>
+              <p class="muted">IP: {{ alert.ip_address or 'unknown' }} - Browser: {{ alert.user_agent or 'unknown' }}</p>
+            </div>
+          </article>
+        {% else %}
+          <p class="empty">No security warnings yet.</p>
         {% endfor %}
       </div>
     </section>

@@ -84,7 +84,7 @@ main{padding:20px}
 .upload-main,.view-main{max-width:980px;margin:24px auto;padding:0 18px}
 .upload-form{background:var(--card);padding:16px;border-radius:10px;border:1px solid var(--border)}
 .upload-form label{display:block;margin-bottom:10px}
-.upload-form input,.upload-form textarea{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
+.upload-form input,.upload-form textarea,.upload-form select{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
 .upload-form textarea{min-height:110px;resize:vertical}
 button, .upload-form button{background:var(--accent);color:#fff;padding:10px 14px;border-radius:8px;border:none}
 button.danger{background:var(--danger)}

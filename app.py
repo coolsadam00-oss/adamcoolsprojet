@@ -143,7 +143,10 @@ def init_db():
             created_at TEXT,
             thumbnail TEXT,
             platform_support TEXT NOT NULL DEFAULT 'pc',
-            source_zip TEXT
+            source_zip TEXT,
+            source_token TEXT,
+            runtime_language TEXT NOT NULL DEFAULT 'html',
+            entry_file TEXT NOT NULL DEFAULT 'index.html'
         )
         """
     )
@@ -279,6 +282,32 @@ def init_db():
         )
         """
     )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS favorites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            project_id INTEGER NOT NULL,
+            created_at TEXT,
+            UNIQUE(user_id, project_id)
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS security_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            visitor_id TEXT,
+            project_id INTEGER,
+            action TEXT NOT NULL,
+            details TEXT,
+            ip_address TEXT,
+            user_agent TEXT,
+            created_at TEXT
+        )
+        """
+    )
     columns = {
         row["name"] for row in db.execute("PRAGMA table_info(projects)").fetchall()
     }
@@ -288,6 +317,17 @@ def init_db():
         db.execute("ALTER TABLE projects ADD COLUMN platform_support TEXT NOT NULL DEFAULT 'pc'")
     if "source_zip" not in columns:
         db.execute("ALTER TABLE projects ADD COLUMN source_zip TEXT")
+    if "source_token" not in columns:
+        db.execute("ALTER TABLE projects ADD COLUMN source_token TEXT")
+    if "runtime_language" not in columns:
+        db.execute("ALTER TABLE projects ADD COLUMN runtime_language TEXT NOT NULL DEFAULT 'html'")
+    if "entry_file" not in columns:
+        db.execute("ALTER TABLE projects ADD COLUMN entry_file TEXT NOT NULL DEFAULT 'index.html'")
+    for row in db.execute("SELECT id FROM projects WHERE source_token IS NULL OR source_token = ''").fetchall():
+        db.execute(
+            "UPDATE projects SET source_token = ? WHERE id = ?",
+            (secrets.token_urlsafe(24), row["id"]),
+        )
     rebuild_users_if_email_is_required(db)
     user_columns = {
         row["name"] for row in db.execute("PRAGMA table_info(users)").fetchall()
@@ -622,6 +662,25 @@ def log_admin_activity(action, target_type="", target_id=None, details=""):
     )
 
 
+def log_security_alert(action, project_id=None, details=""):
+    user = current_user()
+    get_db().execute(
+        "INSERT INTO security_alerts "
+        "(user_id, visitor_id, project_id, action, details, ip_address, user_agent, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            user["id"] if user else None,
+            visitor_id(),
+            project_id,
+            action[:80],
+            details[:500],
+            request_ip(),
+            request.headers.get("User-Agent", "")[:300],
+            datetime.datetime.now(datetime.UTC).isoformat(),
+        ),
+    )
+
+
 def visitor_id():
     if "visitor_id" not in session:
         session["visitor_id"] = secrets.token_urlsafe(16)
@@ -670,6 +729,17 @@ def recent_admin_activity(limit=20):
         "SELECT a.*, u.name, u.email FROM admin_activity a "
         "LEFT JOIN users u ON u.id = a.user_id "
         "ORDER BY a.id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+
+
+def recent_security_alerts(limit=20):
+    return get_db().execute(
+        "SELECT s.*, u.name, u.username, u.email, p.title AS project_title "
+        "FROM security_alerts s "
+        "LEFT JOIN users u ON u.id = s.user_id "
+        "LEFT JOIN projects p ON p.id = s.project_id "
+        "ORDER BY s.id DESC LIMIT ?",
         (limit,),
     ).fetchall()
 
@@ -853,6 +923,34 @@ PLATFORM_OPTIONS = {
     "mobile_pc": "Mobile and PC supported",
 }
 
+LANGUAGE_OPTIONS = {
+    "html": {
+        "label": "HTML / index game",
+        "extensions": {".html", ".htm", ".css", ".js", ".json", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".mp3", ".wav", ".ogg", ".wasm"},
+        "default_entry": "index.html",
+    },
+    "python": {
+        "label": "Python",
+        "extensions": {".py", ".txt", ".md", ".json"},
+        "default_entry": "main.py",
+    },
+    "java": {
+        "label": "Java",
+        "extensions": {".java", ".txt", ".md", ".json"},
+        "default_entry": "Main.java",
+    },
+    "c": {
+        "label": "C",
+        "extensions": {".c", ".h", ".txt", ".md", ".json"},
+        "default_entry": "main.c",
+    },
+    "cpp": {
+        "label": "C++",
+        "extensions": {".cpp", ".cc", ".cxx", ".hpp", ".h", ".txt", ".md", ".json"},
+        "default_entry": "main.cpp",
+    },
+}
+
 
 def validate_platform_support(value):
     value = value.strip()
@@ -861,7 +959,44 @@ def validate_platform_support(value):
     return value
 
 
-def save_and_extract_game_zip(file, folder):
+def validate_runtime_language(value):
+    value = (value or "html").strip().lower()
+    if value not in LANGUAGE_OPTIONS:
+        raise ValueError("Choose HTML, Python, Java, C, or C++.")
+    return value
+
+
+def clean_entry_file(value, language):
+    value = (value or LANGUAGE_OPTIONS[language]["default_entry"]).replace("\\", "/").strip()
+    value = value.lstrip("/")
+    if not value or ".." in value.split("/"):
+        raise ValueError("Choose a safe entry file name.")
+    normalized = os.path.normpath(value).replace("\\", "/")
+    if normalized.startswith("../") or normalized == "..":
+        raise ValueError("Choose a safe entry file name.")
+    ext = os.path.splitext(normalized.lower())[1]
+    if ext not in LANGUAGE_OPTIONS[language]["extensions"]:
+        raise ValueError("The entry file extension does not match the selected language.")
+    return normalized
+
+
+def validate_project_files(folder, language, entry_file):
+    entry_path = os.path.abspath(os.path.join(folder, entry_file))
+    folder_abs = os.path.abspath(folder)
+    if os.path.commonpath([entry_path, folder_abs]) != folder_abs or not os.path.exists(entry_path):
+        raise ValueError(f"Your upload must include {entry_file}.")
+    allowed = LANGUAGE_OPTIONS[language]["extensions"]
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = [name for name in dirs if not name.startswith(".")]
+        for name in files:
+            if name == "source.zip":
+                continue
+            ext = os.path.splitext(name.lower())[1]
+            if ext and ext not in allowed:
+                raise ValueError(f"{name} is not allowed for {LANGUAGE_OPTIONS[language]['label']} uploads.")
+
+
+def save_and_extract_game_zip(file, folder, language="html", entry_file="index.html"):
     if not file:
         raise ValueError("Please choose a zip file containing your project (HTML/CSS/JS).")
     if not file.filename.lower().endswith(".zip"):
@@ -871,6 +1006,25 @@ def save_and_extract_game_zip(file, folder):
     file.save(zip_path)
     with zipfile.ZipFile(zip_path, "r") as zf:
         safe_extract_zip(zf, folder)
+    validate_project_files(folder, language, entry_file)
+    return "source.zip"
+
+
+def save_code_as_project_zip(code, folder, language, entry_file):
+    code = code or ""
+    if not code.strip():
+        raise ValueError("Write code before creating the upload.")
+    os.makedirs(folder, exist_ok=True)
+    entry_path = os.path.abspath(os.path.join(folder, entry_file))
+    folder_abs = os.path.abspath(folder)
+    if os.path.commonpath([entry_path, folder_abs]) != folder_abs:
+        raise ValueError("Choose a safe entry file name.")
+    os.makedirs(os.path.dirname(entry_path), exist_ok=True)
+    with open(entry_path, "w", encoding="utf-8", newline="\n") as source_file:
+        source_file.write(code[:500000])
+    zip_path = os.path.join(folder, "source.zip")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(entry_path, entry_file)
     return "source.zip"
 
 
@@ -1169,6 +1323,11 @@ def account():
         "ORDER BY u.name, u.username",
         (user["id"], user["id"], user["id"]),
     ).fetchall()
+    favorite_projects = db.execute(
+        "SELECT p.* FROM favorites f JOIN projects p ON p.id = f.project_id "
+        "WHERE f.user_id = ? ORDER BY f.id DESC",
+        (user["id"],),
+    ).fetchall()
     messages = db.execute(
         "SELECT m.*, s.name AS sender_name, s.username AS sender_username, "
         "s.email AS sender_email, r.name AS recipient_name, r.username AS recipient_username, "
@@ -1185,6 +1344,8 @@ def account():
         avatars=avatars,
         pending_requests=pending_requests,
         friends=friends,
+        friend_points=len(friends) * 10,
+        favorite_projects=favorite_projects,
         messages=messages,
     )
 
@@ -1303,8 +1464,11 @@ def upload():
         description = request.form.get("description", "").strip()
         tags = request.form.get("tags", "").strip()
         file = request.files.get("file")
+        upload_mode = request.form.get("upload_mode", "zip")
         try:
             platform_support = validate_platform_support(request.form.get("platform_support", ""))
+            runtime_language = validate_runtime_language(request.form.get("runtime_language", "html"))
+            entry_file = clean_entry_file(request.form.get("entry_file", ""), runtime_language)
         except ValueError as error:
             flash(str(error))
             return redirect(request.url)
@@ -1314,17 +1478,39 @@ def upload():
 
         db = get_db()
         created_at = datetime.datetime.now(datetime.UTC).isoformat()
+        source_token = secrets.token_urlsafe(24)
         cur = db.execute(
-            "INSERT INTO projects (title, description, tags, folder, created_at, thumbnail, platform_support, source_zip) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (title, description, tags, "", created_at, "", platform_support, ""),
+            "INSERT INTO projects (title, description, tags, folder, created_at, thumbnail, "
+            "platform_support, source_zip, source_token, runtime_language, entry_file) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                title,
+                description,
+                tags,
+                "",
+                created_at,
+                "",
+                platform_support,
+                "",
+                source_token,
+                runtime_language,
+                entry_file,
+            ),
         )
         db.commit()
         pid = cur.lastrowid
         folder = os.path.join(PROJECTS_DIR, str(pid))
 
         try:
-            source_zip = save_and_extract_game_zip(file, folder)
+            if upload_mode == "code":
+                source_zip = save_code_as_project_zip(
+                    request.form.get("source_code", ""),
+                    folder,
+                    runtime_language,
+                    entry_file,
+                )
+            else:
+                source_zip = save_and_extract_game_zip(file, folder, runtime_language, entry_file)
             thumbnail = save_thumbnail(request.files.get("thumbnail"), folder)
         except Exception as e:
             if os.path.isdir(folder):
@@ -1342,14 +1528,18 @@ def upload():
             "upload_project",
             "project",
             pid,
-            f"Uploaded game: {title}",
+            f"Uploaded {runtime_language} project: {title}",
         )
         db.commit()
 
         flash("Project uploaded successfully.")
         return redirect(url_for("index"))
 
-    return render_template("upload.html", platform_options=PLATFORM_OPTIONS)
+    return render_template(
+        "upload.html",
+        platform_options=PLATFORM_OPTIONS,
+        language_options=LANGUAGE_OPTIONS,
+    )
 
 
 @app.route("/project/<int:pid>")
@@ -1365,6 +1555,7 @@ def view_project(pid):
         abort(404)
     project = dict(row)
     user_rating = None
+    is_favorite = False
     if current_user():
         rating = db.execute(
             "SELECT score FROM ratings WHERE project_id = ? AND user_id = ?",
@@ -1372,6 +1563,12 @@ def view_project(pid):
         ).fetchone()
         if rating:
             user_rating = rating["score"]
+        is_favorite = bool(
+            db.execute(
+                "SELECT id FROM favorites WHERE project_id = ? AND user_id = ?",
+                (pid, current_user()["id"]),
+            ).fetchone()
+        )
     comments = db.execute(
         "SELECT c.*, u.name, u.username, u.email, u.picture, u.is_admin "
         "FROM comments c JOIN users u ON u.id = c.user_id "
@@ -1381,16 +1578,17 @@ def view_project(pid):
 
     # find index.html inside folder
     folder = os.path.join(PROJECTS_DIR, str(pid))
-    index_candidates = ["index.html", "index.htm", "game.html"]
+    index_candidates = [project.get("entry_file") or "index.html", "index.html", "index.htm", "game.html"]
     found = None
-    for root, dirs, files in os.walk(folder):
-        for cand in index_candidates:
-            if cand in files:
-                rel = os.path.relpath(os.path.join(root, cand), folder)
-                found = rel.replace("\\", "/")
+    if (project.get("runtime_language") or "html") == "html":
+        for root, dirs, files in os.walk(folder):
+            for cand in index_candidates:
+                if cand in files:
+                    rel = os.path.relpath(os.path.join(root, cand), folder)
+                    found = rel.replace("\\", "/")
+                    break
+            if found:
                 break
-        if found:
-            break
     log_player_activity(
         "open_game_page",
         pid,
@@ -1403,6 +1601,7 @@ def view_project(pid):
         project=project,
         index_file=found,
         user_rating=user_rating,
+        is_favorite=is_favorite,
         comments=comments,
     )
 
@@ -1478,6 +1677,32 @@ def add_comment(pid):
     return redirect(url_for("view_project", pid=pid))
 
 
+@app.route("/project/<int:pid>/favorite", methods=["POST"])
+@login_required
+def favorite_project(pid):
+    db = get_db()
+    project = db.execute("SELECT id, title FROM projects WHERE id = ?", (pid,)).fetchone()
+    if not project:
+        abort(404)
+    user_id = current_user()["id"]
+    favorite = db.execute(
+        "SELECT id FROM favorites WHERE user_id = ? AND project_id = ?",
+        (user_id, pid),
+    ).fetchone()
+    if favorite:
+        db.execute("DELETE FROM favorites WHERE id = ?", (favorite["id"],))
+        flash("Removed from favorites.")
+    else:
+        db.execute(
+            "INSERT INTO favorites (user_id, project_id, created_at) VALUES (?, ?, ?)",
+            (user_id, pid, datetime.datetime.now(datetime.UTC).isoformat()),
+        )
+        flash("Added to favorites.")
+    log_player_activity("favorite_game", pid, f"Toggled favorite for {project['title']}")
+    db.commit()
+    return redirect(request.referrer or url_for("view_project", pid=pid))
+
+
 @app.route("/comments/<int:comment_id>/delete", methods=["POST"])
 @admin_required
 def delete_comment(comment_id):
@@ -1507,9 +1732,28 @@ def delete_comment(comment_id):
 
 @app.route("/project_files/<int:pid>/<path:filename>")
 def project_files(pid, filename):
+    db = get_db()
+    project = db.execute("SELECT source_zip FROM projects WHERE id = ?", (pid,)).fetchone()
+    if not project:
+        abort(404)
+    requested = filename.replace("\\", "/").split("/")[-1]
+    if requested == (project["source_zip"] or "") or requested.lower() == "source.zip":
+        log_security_alert(
+            "Blocked public source ZIP request",
+            pid,
+            f"Attempted public file request: {filename}",
+        )
+        db.commit()
+        abort(404)
     folder = os.path.join(PROJECTS_DIR, str(pid))
     full = os.path.join(folder, filename)
     if not os.path.commonpath([os.path.abspath(full), folder]) == os.path.abspath(folder):
+        log_security_alert(
+            "Blocked unsafe project file path",
+            pid,
+            f"Attempted unsafe file request: {filename}",
+        )
+        db.commit()
         abort(403)
     if not os.path.exists(full):
         abort(404)
@@ -1519,8 +1763,20 @@ def project_files(pid, filename):
 @app.route("/admin/projects/<int:pid>/source.zip")
 @admin_required
 def download_project_source(pid):
+    abort(404)
+
+
+@app.route("/admin/projects/<int:pid>/source/<token>.zip")
+@admin_required
+def download_project_source_token(pid, token):
     project = get_db().execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
-    if not project or not project["source_zip"]:
+    if not project or not project["source_zip"] or not secrets.compare_digest(token, project["source_token"] or ""):
+        log_security_alert(
+            "Blocked bad source ZIP token",
+            pid,
+            "Admin source ZIP download was requested with a bad token.",
+        )
+        get_db().commit()
         abort(404)
     folder = os.path.abspath(os.path.join(PROJECTS_DIR, str(pid)))
     source_path = os.path.join(folder, project["source_zip"])
@@ -1543,6 +1799,8 @@ def replace_project_source(pid):
         abort(404)
     try:
         platform_support = validate_platform_support(request.form.get("platform_support", ""))
+        runtime_language = validate_runtime_language(request.form.get("runtime_language", project["runtime_language"] or "html"))
+        entry_file = clean_entry_file(request.form.get("entry_file", project["entry_file"] or ""), runtime_language)
     except ValueError as error:
         flash(str(error))
         return redirect(url_for("admin_panel"))
@@ -1562,7 +1820,7 @@ def replace_project_source(pid):
         shutil.rmtree(folder)
     os.makedirs(folder, exist_ok=True)
     try:
-        source_zip = save_and_extract_game_zip(request.files.get("file"), folder)
+        source_zip = save_and_extract_game_zip(request.files.get("file"), folder, runtime_language, entry_file)
     except Exception as error:
         if os.path.isdir(folder):
             shutil.rmtree(folder)
@@ -1574,8 +1832,8 @@ def replace_project_source(pid):
     if os.path.isdir(backup_folder):
         shutil.rmtree(backup_folder)
     db.execute(
-        "UPDATE projects SET platform_support = ?, source_zip = ? WHERE id = ?",
-        (platform_support, source_zip, pid),
+        "UPDATE projects SET platform_support = ?, source_zip = ?, runtime_language = ?, entry_file = ? WHERE id = ?",
+        (platform_support, source_zip, runtime_language, entry_file, pid),
     )
     log_admin_activity(
         "replace_project_zip",
@@ -1596,6 +1854,8 @@ def project_file_list(pid):
     for root, dirs, names in os.walk(folder):
         dirs[:] = [name for name in dirs if not name.startswith(".")]
         for name in names:
+            if name == "source.zip":
+                continue
             rel = os.path.relpath(os.path.join(root, name), folder).replace("\\", "/")
             files.append(rel)
     return sorted(files)
@@ -1640,6 +1900,7 @@ def admin_panel():
         avatars=avatars,
         activities=activities,
         player_activities=player_activities,
+        security_alerts=recent_security_alerts(),
         bans=bans,
         q=q,
         lulu_message=None,
@@ -1820,6 +2081,7 @@ def lulu():
             avatars=get_db().execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall(),
             activities=recent_admin_activity(),
             player_activities=recent_player_activity(),
+            security_alerts=recent_security_alerts(),
             bans=get_db().execute(
                 "SELECT b.*, u.name, u.username, u.email, u.is_admin FROM user_bans b "
                 "JOIN users u ON u.id = b.user_id WHERE b.lifted_at IS NULL ORDER BY b.id DESC"
@@ -1836,6 +2098,7 @@ def lulu():
         avatars=get_db().execute("SELECT * FROM avatar_options ORDER BY id DESC").fetchall(),
         activities=recent_admin_activity(),
         player_activities=recent_player_activity(),
+        security_alerts=recent_security_alerts(),
         bans=get_db().execute(
             "SELECT b.*, u.name, u.username, u.email, u.is_admin FROM user_bans b "
             "JOIN users u ON u.id = b.user_id WHERE b.lifted_at IS NULL ORDER BY b.id DESC"

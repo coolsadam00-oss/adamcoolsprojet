@@ -21,6 +21,7 @@
     <section class="account-panel">
       <h1>Your account</h1>
       <p class="muted">{{ current_user.username or display_name }}{% if current_user.email %} - {{ current_user.email }}{% endif %}</p>
+      <p class="notice"><strong>Friend points:</strong> {{ friend_points }}</p>
       {% with messages = get_flashed_messages() %}
         {% if messages %}
           <ul class="flashes">
@@ -94,6 +95,22 @@
             </article>
           {% else %}
             <p class="empty">Search for players and add them as friends before messaging.</p>
+          {% endfor %}
+        </div>
+      </section>
+      <section class="profile-form">
+        <h2>Favorite games</h2>
+        <div class="admin-list">
+          {% for project in favorite_projects %}
+            <article class="admin-row">
+              <div>
+                <strong>{{ project.title }}</strong>
+                <p class="muted">{{ project.description }}</p>
+              </div>
+              <a class="btn small" href="/project/{{ project.id }}">Open</a>
+            </article>
+          {% else %}
+            <p class="empty">No favorite games yet.</p>
           {% endfor %}
         </div>
       </section>

@@ -46,6 +46,9 @@
           {% endif %}
         </div>
         {% if current_user %}
+          <form method="post" action="/project/{{ project.id }}/favorite" class="rating-form">
+            <button type="submit">{% if is_favorite %}Remove favorite{% else %}Favorite game{% endif %}</button>
+          </form>
           <form method="post" action="/project/{{ project.id }}/rate" class="rating-form">
             <label for="score">Your rating</label>
             <select id="score" name="score">
@@ -73,7 +76,7 @@
       <p><a class="btn small" href="/project_files/{{ project.id }}/{{ index_file }}" target="_blank">Open in new tab</a></p>
       <div class="iframe-wrap"><iframe src="/project_files/{{ project.id }}/{{ index_file }}"></iframe></div>
     {% else %}
-      <p>No index.html found in this project. You can browse files <a href="/project_files/{{ project.id }}/">here</a>.</p>
+      <p>This upload is saved as {{ project.runtime_language or 'source' }} source code. Admins can download the private source ZIP from the admin panel.</p>
     {% endif %}
 
     <section class="comments-panel" aria-label="Game comments">

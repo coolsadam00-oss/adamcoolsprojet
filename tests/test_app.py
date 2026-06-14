@@ -1032,13 +1032,119 @@ class SiteAuthAdminTests(unittest.TestCase):
             ).fetchone()
 
         admin_page = self.client.get("/admin")
-        download_response = self.client.get(f"/admin/projects/{project['id']}/source.zip")
+        source_link = f"/admin/projects/{project['id']}/source/{project['source_token']}.zip"
+        old_download_response = self.client.get(f"/admin/projects/{project['id']}/source.zip")
+        download_response = self.client.get(source_link)
 
         self.assertEqual(admin_page.status_code, 200)
         self.assertIn(b"Download source ZIP", admin_page.data)
+        self.assertIn(source_link.encode(), admin_page.data)
+        self.assertEqual(old_download_response.status_code, 404)
         self.assertEqual(download_response.status_code, 200)
         self.assertIn(b"Game", download_response.data)
         download_response.close()
+
+    def test_public_source_zip_request_is_blocked_and_warns_admin(self):
+        self.login()
+        self.client.post(
+            "/upload",
+            data={
+                "title": "Private Source",
+                "platform_support": "pc",
+                "confirm_upload": "on",
+                "upload_mode": "zip",
+                "runtime_language": "html",
+                "entry_file": "index.html",
+                "file": (self.make_zip(), "private.zip"),
+            },
+            content_type="multipart/form-data",
+        )
+        with site.app.app_context():
+            project = site.get_db().execute(
+                "SELECT * FROM projects WHERE title = ?",
+                ("Private Source",),
+            ).fetchone()
+
+        with self.client.session_transaction() as session:
+            session.clear()
+        blocked_response = self.client.get(f"/project_files/{project['id']}/source.zip")
+        self.login()
+        admin_page = self.client.get("/admin")
+
+        self.assertEqual(blocked_response.status_code, 404)
+        self.assertIn(b"Security warnings", admin_page.data)
+        self.assertIn(b"Blocked public source ZIP request", admin_page.data)
+
+    def test_admin_can_create_python_source_upload_from_code(self):
+        self.login()
+
+        response = self.client.post(
+            "/upload",
+            data={
+                "title": "Python Tool",
+                "description": "Source only",
+                "tags": "python",
+                "platform_support": "pc",
+                "confirm_upload": "on",
+                "upload_mode": "code",
+                "runtime_language": "python",
+                "entry_file": "main.py",
+                "source_code": "print('hello')",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            project = site.get_db().execute(
+                "SELECT * FROM projects WHERE title = ?",
+                ("Python Tool",),
+            ).fetchone()
+        self.assertEqual(project["runtime_language"], "python")
+        self.assertEqual(project["entry_file"], "main.py")
+        self.assertTrue(project["source_token"])
+        self.assertTrue(
+            os.path.exists(os.path.join(site.PROJECTS_DIR, str(project["id"]), "main.py"))
+        )
+        self.assertTrue(
+            os.path.exists(os.path.join(site.PROJECTS_DIR, str(project["id"]), project["source_zip"]))
+        )
+
+    def test_signed_in_user_can_favorite_game_and_see_it_on_account(self):
+        user_id = self.login("player@example.com", "Player")
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Favorite Me", "", "", "1", "now"),
+            )
+            project_id = cur.lastrowid
+            db.commit()
+
+        favorite_response = self.client.post(f"/project/{project_id}/favorite")
+        account_response = self.client.get("/account")
+
+        self.assertEqual(favorite_response.status_code, 302)
+        with site.app.app_context():
+            favorite = site.get_db().execute(
+                "SELECT * FROM favorites WHERE user_id = ? AND project_id = ?",
+                (user_id, project_id),
+            ).fetchone()
+        self.assertIsNotNone(favorite)
+        self.assertIn(b"Favorite Me", account_response.data)
+
+    def test_account_shows_friend_points(self):
+        player_id = self.login("player@example.com", "Player")
+        with site.app.app_context():
+            friend = site.upsert_user("friend@example.com", "Friend")
+            site.create_friend_request(friend["id"], player_id)
+
+        self.client.post(f"/friends/{friend['id']}/accept")
+        response = self.client.get("/account")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Friend points", response.data)
+        self.assertIn(b"10", response.data)
 
     def test_admin_can_replace_uploaded_game_zip(self):
         self.login()
