@@ -140,6 +140,19 @@ button.small{padding:6px 10px;font-size:13px}
 .legal-main h2{margin-top:24px;font-size:20px}
 .legal-main a, footer a, .auth-form a{color:var(--accent)}
 
+.banned-body{min-height:100vh;background:#7f0000;color:#fff}
+.banned-screen{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at top,#ef4444 0,#991b1b 42%,#450a0a 100%)}
+.banned-panel{width:min(640px,100%);padding:28px;border:2px solid rgba(255,255,255,0.35);border-radius:8px;background:rgba(69,10,10,0.88);box-shadow:0 24px 80px rgba(0,0,0,0.4);text-align:center}
+.banned-kicker{margin:0 0 8px;text-transform:uppercase;letter-spacing:.14em;font-size:12px;font-weight:800;color:#fecaca}
+.banned-panel h1{margin:0;font-size:clamp(38px,8vw,72px);line-height:1}
+.banned-panel p{font-size:17px;line-height:1.55}
+.banned-info{margin:22px 0;text-align:left;border:1px solid rgba(255,255,255,0.3);border-radius:8px;background:rgba(0,0,0,0.22)}
+.banned-info summary{padding:14px 16px;cursor:pointer;font-weight:800;text-align:center}
+.banned-info div{padding:0 16px 16px}
+.banned-info h2{margin:14px 0 4px;font-size:15px;color:#fecaca}
+.banned-info p{margin:0;overflow-wrap:anywhere}
+.banned-panel button{background:#fff;color:#991b1b;font-weight:800}
+
 .account-main{max-width:720px;margin:28px auto;padding:0 18px}
 .account-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px}
 .profile-form{margin-top:18px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}

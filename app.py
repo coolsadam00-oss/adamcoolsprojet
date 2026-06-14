@@ -583,6 +583,13 @@ def active_ban_for_user(user_id):
     ).fetchone()
 
 
+def current_ban():
+    user = current_user()
+    if not user:
+        return None
+    return active_ban_for_user(user["id"])
+
+
 def ban_expiry(duration):
     if duration == "forever":
         return None
@@ -686,6 +693,16 @@ def admin_required(view):
         return view(*args, **kwargs)
 
     return wrapped
+
+
+@app.before_request
+def block_banned_users():
+    allowed_endpoints = {"banned_notice", "logout", "static"}
+    if request.endpoint in allowed_endpoints:
+        return None
+    if current_ban():
+        return redirect(url_for("banned_notice"))
+    return None
 
 
 def safe_next_url(value):
@@ -806,11 +823,6 @@ def authenticate_password_user(identifier, password):
         return None, "Username/email or password is wrong."
     if not check_password_hash(user["password_hash"], password):
         return None, "Username/email or password is wrong."
-    ban = active_ban_for_user(user["id"])
-    if ban:
-        if ban["expires_at"]:
-            return None, f"This account is banned until {ban['expires_at']}."
-        return None, "This account is banned."
     return user, None
 
 
@@ -1053,6 +1065,15 @@ def terms():
 @app.route("/privacy")
 def privacy():
     return render_template("privacy.html")
+
+
+@app.route("/banned")
+@login_required
+def banned_notice():
+    ban = current_ban()
+    if not ban:
+        return redirect(url_for("index"))
+    return render_template("banned.html", ban=ban)
 
 
 @app.route("/auth/google")

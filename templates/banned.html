@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>You are banned - {{ site_name }}</title>
+  <link rel="icon" href="/static/site-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="banned-body">
+  <main class="banned-screen">
+    <section class="banned-panel" aria-labelledby="banned-title">
+      <p class="banned-kicker">Account blocked</p>
+      <h1 id="banned-title">You are banned</h1>
+      <p>You cannot play games or use this site while this ban is active.</p>
+
+      <details class="banned-info">
+        <summary>Click here for more info</summary>
+        <div>
+          <h2>Reason</h2>
+          <p>{{ ban.reason or "No reason was written by the admin." }}</p>
+          <h2>Ban length</h2>
+          <p>{% if ban.expires_at %}Until {{ ban.expires_at }}{% else %}Forever{% endif %}</p>
+        </div>
+      </details>
+
+      <form method="post" action="/logout">
+        <button type="submit">Sign out</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

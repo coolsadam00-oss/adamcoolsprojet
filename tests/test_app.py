@@ -1142,6 +1142,33 @@ class SiteAuthAdminTests(unittest.TestCase):
             ).fetchone()
         self.assertIsNone(ban)
 
+    def test_banned_user_sees_red_notice_and_cannot_open_games(self):
+        user_id = self.login("badplayer@example.com", "Bad Player")
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Blocked Game", "", "", "1", "now"),
+            )
+            project_id = cur.lastrowid
+            db.execute(
+                "INSERT INTO user_bans (user_id, reason, created_at, expires_at) "
+                "VALUES (?, ?, ?, NULL)",
+                (user_id, "Breaking the rules", "now"),
+            )
+            db.commit()
+
+        game_response = self.client.get(f"/project/{project_id}")
+        banned_response = self.client.get("/banned")
+
+        self.assertEqual(game_response.status_code, 302)
+        self.assertIn("/banned", game_response.headers["Location"])
+        self.assertEqual(banned_response.status_code, 200)
+        self.assertIn(b"You are banned", banned_response.data)
+        self.assertIn(b"Click here for more info", banned_response.data)
+        self.assertIn(b"Breaking the rules", banned_response.data)
+
     def test_regular_admin_cannot_ban_or_demote_admins(self):
         mod_id = self.login("mod@example.com", "Mod")
         with site.app.app_context():
