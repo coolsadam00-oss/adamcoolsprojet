@@ -1464,11 +1464,10 @@ def upload():
         description = request.form.get("description", "").strip()
         tags = request.form.get("tags", "").strip()
         file = request.files.get("file")
-        upload_mode = request.form.get("upload_mode", "zip")
         try:
             platform_support = validate_platform_support(request.form.get("platform_support", ""))
             runtime_language = validate_runtime_language(request.form.get("runtime_language", "html"))
-            entry_file = clean_entry_file(request.form.get("entry_file", ""), runtime_language)
+            entry_file = clean_entry_file("", runtime_language)
         except ValueError as error:
             flash(str(error))
             return redirect(request.url)
@@ -1502,15 +1501,7 @@ def upload():
         folder = os.path.join(PROJECTS_DIR, str(pid))
 
         try:
-            if upload_mode == "code":
-                source_zip = save_code_as_project_zip(
-                    request.form.get("source_code", ""),
-                    folder,
-                    runtime_language,
-                    entry_file,
-                )
-            else:
-                source_zip = save_and_extract_game_zip(file, folder, runtime_language, entry_file)
+            source_zip = save_and_extract_game_zip(file, folder, runtime_language, entry_file)
             thumbnail = save_thumbnail(request.files.get("thumbnail"), folder)
         except Exception as e:
             if os.path.isdir(folder):
@@ -1800,7 +1791,7 @@ def replace_project_source(pid):
     try:
         platform_support = validate_platform_support(request.form.get("platform_support", ""))
         runtime_language = validate_runtime_language(request.form.get("runtime_language", project["runtime_language"] or "html"))
-        entry_file = clean_entry_file(request.form.get("entry_file", project["entry_file"] or ""), runtime_language)
+        entry_file = clean_entry_file("", runtime_language)
     except ValueError as error:
         flash(str(error))
         return redirect(url_for("admin_panel"))

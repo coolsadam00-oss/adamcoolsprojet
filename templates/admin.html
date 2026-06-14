@@ -85,7 +85,6 @@
                   <option value="c" {% if p.runtime_language == 'c' %}selected{% endif %}>C</option>
                   <option value="cpp" {% if p.runtime_language == 'cpp' %}selected{% endif %}>C++</option>
                 </select>
-                <input name="entry_file" value="{{ p.entry_file or 'index.html' }}" required>
                 <input type="file" name="file" accept=".zip" required>
                 <label class="check-row"><input name="confirm_upload" type="checkbox" required> Confirm replace</label>
                 <button type="submit">Update files</button>

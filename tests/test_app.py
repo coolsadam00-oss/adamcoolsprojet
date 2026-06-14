@@ -65,10 +65,10 @@ class SiteAuthAdminTests(unittest.TestCase):
             session["user_id"] = user_id
         return user_id
 
-    def make_zip(self):
+    def make_zip(self, filename="index.html", body="<h1>Game</h1>"):
         payload = io.BytesIO()
         with zipfile.ZipFile(payload, "w") as zf:
-            zf.writestr("index.html", "<h1>Game</h1>")
+            zf.writestr(filename, body)
         payload.seek(0)
         return payload
 
@@ -250,6 +250,10 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertIn(b"Upload a 2D or 3D game", response.data)
         self.assertIn(b"2D or 3D HTML5 game ZIP", response.data)
         self.assertIn(b"Upload 2D / 3D Game", response.data)
+        self.assertIn(b"Language", response.data)
+        self.assertNotIn(b"Upload type", response.data)
+        self.assertNotIn(b"Write code", response.data)
+        self.assertNotIn(b"Entry file", response.data)
 
     def test_google_login_uses_https_callback_and_saves_next_url(self):
         site.app.config["PREFERRED_URL_SCHEME"] = "https"
@@ -1052,9 +1056,7 @@ class SiteAuthAdminTests(unittest.TestCase):
                 "title": "Private Source",
                 "platform_support": "pc",
                 "confirm_upload": "on",
-                "upload_mode": "zip",
                 "runtime_language": "html",
-                "entry_file": "index.html",
                 "file": (self.make_zip(), "private.zip"),
             },
             content_type="multipart/form-data",
@@ -1075,7 +1077,7 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertIn(b"Security warnings", admin_page.data)
         self.assertIn(b"Blocked public source ZIP request", admin_page.data)
 
-    def test_admin_can_create_python_source_upload_from_code(self):
+    def test_admin_can_upload_python_source_zip_with_language_choice(self):
         self.login()
 
         response = self.client.post(
@@ -1086,11 +1088,10 @@ class SiteAuthAdminTests(unittest.TestCase):
                 "tags": "python",
                 "platform_support": "pc",
                 "confirm_upload": "on",
-                "upload_mode": "code",
                 "runtime_language": "python",
-                "entry_file": "main.py",
-                "source_code": "print('hello')",
+                "file": (self.make_zip("main.py", "print('hello')"), "python-tool.zip"),
             },
+            content_type="multipart/form-data",
         )
 
         self.assertEqual(response.status_code, 302)
