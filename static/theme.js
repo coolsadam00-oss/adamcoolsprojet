@@ -30,3 +30,29 @@ if (themeToggle) {
     setTheme(nextTheme);
   });
 }
+
+function pollBannedStatus() {
+  if (!window.fetch || window.location.pathname === '/banned') {
+    return;
+  }
+  fetch('/banned-status', { credentials: 'same-origin' })
+    .then(function (response) {
+      if (!response.ok) {
+        return null;
+      }
+      return response.json();
+    })
+    .then(function (data) {
+      if (data && data.banned) {
+        window.location.href = '/banned';
+      }
+    })
+    .catch(function () {
+      // Ignore polling failures.
+    });
+}
+
+if (window.location.pathname !== '/banned') {
+  pollBannedStatus();
+  setInterval(pollBannedStatus, 10000);
+}

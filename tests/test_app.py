@@ -82,28 +82,51 @@ class SiteAuthAdminTests(unittest.TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'list="gameSuggestions"', response.data)
-        self.assertIn(b'id="gameSuggestions"', response.data)
+        self.assertIn(b'id="searchInput"', response.data)
+        self.assertIn(b'id="searchSuggestions"', response.data)
+        self.assertIn(b"search-suggestion-thumb", response.data)
+        self.assertIn(b"item.image", response.data)
 
-    def test_search_suggestions_returns_similar_game_titles(self):
+    def test_search_suggestions_returns_game_and_user_previews(self):
         with site.app.app_context():
             db = site.get_db()
             db.execute(
-                "INSERT INTO projects (title, description, tags, folder, created_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                ("Space Runner", "Fast space game", "space,arcade", "1", "now"),
+                "INSERT INTO projects (id, title, description, tags, folder, created_at, thumbnail) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (10, "Space Runner", "Fast space game", "space,arcade", "10", "now", "thumb.png"),
             )
             db.execute(
                 "INSERT INTO projects (title, description, tags, folder, created_at) "
                 "VALUES (?, ?, ?, ?, ?)",
                 ("Puzzle Garden", "Calm puzzle game", "puzzle", "2", "now"),
             )
+            site.upsert_user("spacefan@example.com", "Space Fan", "/static/avatar.png")
             db.commit()
 
         response = self.client.get("/search/suggestions?q=spa")
+        data = response.get_json()
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json(), {"suggestions": ["Space Runner"]})
+        self.assertIn(
+            {
+                "type": "game",
+                "title": "Space Runner",
+                "subtitle": "Fast space game",
+                "url": "/project/10",
+                "image": "/project_files/10/thumb.png",
+            },
+            data["items"],
+        )
+        self.assertIn(
+            {
+                "type": "user",
+                "title": "Space Fan",
+                "subtitle": "Player",
+                "url": "/?q=Space+Fan",
+                "image": "/static/avatar.png",
+            },
+            data["items"],
+        )
 
     def test_guest_can_view_project(self):
         with site.app.app_context():
@@ -1203,6 +1226,93 @@ class SiteAuthAdminTests(unittest.TestCase):
                 (project_id,),
             ).fetchone()
         self.assertIsNone(row)
+
+    def test_admin_can_download_website_data_zip(self):
+        self.login()
+        with site.app.app_context():
+            db = site.get_db()
+            db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at, thumbnail) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                ("Data Game", "Backup item", "backup", "1", "now", "thumb.png"),
+            )
+            db.commit()
+            project_id = db.execute("SELECT id FROM projects WHERE title = ?", ("Data Game",)).fetchone()["id"]
+            folder = os.path.join(site.PROJECTS_DIR, str(project_id))
+            os.makedirs(folder, exist_ok=True)
+            with open(os.path.join(folder, "index.html"), "w", encoding="utf-8") as f:
+                f.write("<h1>Data Game</h1>")
+            with open(os.path.join(folder, "thumb.png"), "wb") as f:
+                f.write(b"\x89PNG\r\n\x1a\n")
+            db.execute(
+                "INSERT INTO users (email, username, name, created_at) VALUES (?, ?, ?, ?)",
+                ("exporttest@example.com", "exporttest", "Export Test", "now"),
+            )
+            db.commit()
+
+        response = self.client.get("/admin/export-website-data")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Content-Type"], "application/zip")
+        archive = zipfile.ZipFile(io.BytesIO(response.data))
+        self.assertIn("projects.db", archive.namelist())
+        self.assertIn("users.json", archive.namelist())
+        self.assertIn(f"{project_id}/index.html", archive.namelist())
+        self.assertIn(f"{project_id}/thumb.png", archive.namelist())
+
+    def test_admin_can_import_website_data_zip(self):
+        self.login()
+        with site.app.app_context():
+            db = site.get_db()
+            db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Original Game", "Original", "backup", "1", "now"),
+            )
+            db.commit()
+            original_count = db.execute("SELECT COUNT(*) AS count FROM projects").fetchone()["count"]
+
+        temp_db_fd, temp_db_path = tempfile.mkstemp(suffix=".db")
+        os.close(temp_db_fd)
+        try:
+            conn = sqlite3.connect(temp_db_path)
+            conn.execute(
+                "CREATE TABLE projects (id INTEGER PRIMARY KEY AUTOINCREMENT)"
+            )
+            conn.commit()
+            conn.close()
+
+            export_zip = io.BytesIO()
+            with zipfile.ZipFile(export_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.write(temp_db_path, "projects.db")
+            export_zip.seek(0)
+
+            response = self.client.post(
+                "/admin/import-website-data",
+                data={"backup": (export_zip, "backup.zip")},
+                content_type="multipart/form-data",
+            )
+        finally:
+            os.unlink(temp_db_path)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin", response.headers["Location"])
+
+    def test_banned_status_endpoint_reports_active_ban(self):
+        self.login("badplayer@example.com", "Bad Player")
+        with site.app.app_context():
+            user = site.lookup_user_by_identifier("badplayer@example.com")
+            site.get_db().execute(
+                "INSERT INTO user_bans (user_id, reason, created_at, expires_at) "
+                "VALUES (?, ?, ?, NULL)",
+                (user["id"], "Breaking the rules", "now"),
+            )
+            site.get_db().commit()
+
+        response = self.client.get("/banned-status")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"banned": True})
 
     def test_admin_can_promote_user(self):
         self.login()

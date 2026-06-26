@@ -1,9 +1,11 @@
+import io
 import os
 import re
 import shutil
 import secrets
 import smtplib
 import sqlite3
+import tempfile
 import zipfile
 import datetime
 import urllib.parse
@@ -18,6 +20,7 @@ from flask import (
     request,
     redirect,
     url_for,
+    send_file,
     send_from_directory,
     abort,
     flash,
@@ -768,7 +771,7 @@ def admin_required(view):
 
 @app.before_request
 def block_banned_users():
-    allowed_endpoints = {"banned_notice", "logout", "static"}
+    allowed_endpoints = {"banned_notice", "logout", "static", "banned_status"}
     if request.endpoint in allowed_endpoints:
         return None
     if current_ban():
@@ -1067,19 +1070,58 @@ def index():
 def search_suggestions():
     q = " ".join(request.args.get("q", "").split())[:60]
     db = get_db()
+    suggestions = []
     if q:
         like = f"%{q}%"
-        rows = db.execute(
-            "SELECT title FROM projects "
+        project_rows = db.execute(
+            "SELECT id, title, description, thumbnail FROM projects "
             "WHERE title LIKE ? OR description LIKE ? OR tags LIKE ? "
             "ORDER BY CASE WHEN title LIKE ? THEN 0 ELSE 1 END, id DESC LIMIT 6",
             (like, like, like, f"{q}%"),
         ).fetchall()
+        suggestions.extend(
+            {
+                "type": "game",
+                "title": row["title"],
+                "subtitle": row["description"] or "",
+                "url": f"/project/{row['id']}",
+                "image": f"/project_files/{row['id']}/{row['thumbnail']}" if row["thumbnail"] else "/static/site-icon.svg",
+            }
+            for row in project_rows
+            if row["title"]
+        )
+        user_rows = db.execute(
+            "SELECT id, name, username, email, picture FROM users "
+            "WHERE name LIKE ? OR username LIKE ? OR email LIKE ? "
+            "ORDER BY name LIMIT 6",
+            (like, like, like),
+        ).fetchall()
+        suggestions.extend(
+            {
+                "type": "user",
+                "title": row["name"] or row["username"] or (row["email"] or "").split("@")[0],
+                "subtitle": "Player",
+                "url": f"/?q={urllib.parse.quote_plus(row['name'] or row['username'] or row['email'] or '')}",
+                "image": row["picture"] or "/static/site-icon.svg",
+            }
+            for row in user_rows
+        )
     else:
         rows = db.execute(
-            "SELECT title FROM projects ORDER BY id DESC LIMIT 6",
+            "SELECT id, title, description, thumbnail FROM projects ORDER BY id DESC LIMIT 6",
         ).fetchall()
-    return jsonify({"suggestions": [row["title"] for row in rows if row["title"]]})
+        suggestions.extend(
+            {
+                "type": "game",
+                "title": row["title"],
+                "subtitle": row["description"] or "",
+                "url": f"/project/{row['id']}",
+                "image": f"/project_files/{row['id']}/{row['thumbnail']}" if row["thumbnail"] else "/static/site-icon.svg",
+            }
+            for row in rows
+            if row["title"]
+        )
+    return jsonify({"items": suggestions})
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -1408,6 +1450,8 @@ def send_message(user_id):
     try:
         body = validate_safe_message(request.form.get("body", ""))
     except ValueError as error:
+        if request.headers.get("Accept") == "application/json":
+            return jsonify({"success": False, "error": str(error)}), 400
         flash(str(error))
         return redirect(url_for("account"))
     get_db().execute(
@@ -1422,6 +1466,8 @@ def send_message(user_id):
     )
     log_player_activity("send_friend_message", None, f"Sent message to {user_label(recipient)}")
     get_db().commit()
+    if request.headers.get("Accept") == "application/json":
+        return jsonify({"success": True, "message": "Message sent."})
     flash("Message sent.")
     return redirect(url_for("account"))
 
@@ -1857,6 +1903,151 @@ def admin_panel():
         q=q,
         lulu_message=None,
     )
+
+
+def add_folder_to_zip(zipf, root_folder, root_name):
+    if not os.path.isdir(root_folder):
+        return
+    for root, dirs, files in os.walk(root_folder):
+        dirs[:] = [name for name in dirs if not name.startswith('.')]
+        for name in files:
+            path = os.path.join(root, name)
+            rel = os.path.relpath(path, root_folder).replace('\\', '/')
+            zipf.write(path, f"{root_name}/{rel}")
+
+
+def add_project_folder_to_zip(zipf, project_id):
+    folder = os.path.join(PROJECTS_DIR, str(project_id))
+    if not os.path.isdir(folder):
+        return
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = [name for name in dirs if not name.startswith('.')]
+        for name in files:
+            path = os.path.join(root, name)
+            rel = os.path.relpath(path, PROJECTS_DIR).replace('\\', '/')
+            zipf.write(path, rel)
+
+
+def export_table_to_json(zipf, db, table_name):
+    rows = [dict(row) for row in db.execute(f"SELECT * FROM {table_name}").fetchall()]
+    zipf.writestr(f"{table_name}.json", json.dumps(rows, default=str, indent=2))
+
+
+@app.route("/admin/export-website-data")
+@admin_required
+def export_website_data():
+    memory_file = io.BytesIO()
+    with zipfile.ZipFile(memory_file, "w", zipfile.ZIP_DEFLATED) as archive:
+        if os.path.exists(DB_PATH):
+            archive.write(DB_PATH, os.path.basename(DB_PATH))
+        db = get_db()
+        for table_name in [
+            "users",
+            "friendships",
+            "messages",
+            "favorites",
+            "comments",
+            "ratings",
+            "security_alerts",
+            "avatar_options",
+            "settings",
+            "user_bans",
+            "admin_activity",
+            "player_activity",
+        ]:
+            export_table_to_json(archive, db, table_name)
+        add_folder_to_zip(archive, BACKUPS_DIR, "backups")
+        for row in db.execute("SELECT id FROM projects").fetchall():
+            add_project_folder_to_zip(archive, row["id"])
+
+    memory_file.seek(0)
+    return send_file(
+        memory_file,
+        mimetype="application/zip",
+        download_name="website-data.zip",
+        as_attachment=True,
+    )
+
+
+@app.route("/admin/import-website-data", methods=["POST"])
+@admin_required
+def import_website_data():
+    file = request.files.get("backup")
+    if not file or not file.filename.lower().endswith(".zip"):
+        flash("Please choose a ZIP file to import.")
+        return redirect(url_for("admin_panel"))
+
+    temp_root = tempfile.mkdtemp(prefix="import-", dir=DATA_DIR)
+    zip_path = os.path.join(temp_root, "import.zip")
+    file.save(zip_path)
+
+    project_backup = None
+    db_backup = None
+    try:
+        with zipfile.ZipFile(zip_path, "r") as archive:
+            safe_extract_zip(archive, temp_root)
+
+        imported_db_path = os.path.join(temp_root, os.path.basename(DB_PATH))
+        if not os.path.exists(imported_db_path):
+            flash("Import ZIP must contain a projects.db file.")
+            return redirect(url_for("admin_panel"))
+
+        try:
+            with sqlite3.connect(imported_db_path) as imported_db:
+                row = imported_db.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='projects'"
+                ).fetchone()
+            if not row:
+                raise sqlite3.DatabaseError("Missing required projects table")
+        except sqlite3.DatabaseError:
+            flash("Import ZIP contains an invalid or corrupt database file.")
+            return redirect(url_for("admin_panel"))
+
+        db_backup = backup_database("import")
+        project_backup = os.path.join(DATA_DIR, "projects-import-backup")
+        if os.path.isdir(project_backup):
+            shutil.rmtree(project_backup)
+        if os.path.isdir(PROJECTS_DIR):
+            shutil.copytree(PROJECTS_DIR, project_backup)
+
+        shutil.copy2(imported_db_path, DB_PATH)
+        backups_import = os.path.join(temp_root, "backups")
+        if os.path.isdir(backups_import):
+            if os.path.isdir(BACKUPS_DIR):
+                shutil.rmtree(BACKUPS_DIR)
+            shutil.copytree(backups_import, BACKUPS_DIR)
+
+        for entry in os.listdir(temp_root):
+            if entry in {os.path.basename(DB_PATH), "import.zip", "backups"}:
+                continue
+            src = os.path.join(temp_root, entry)
+            if os.path.isdir(src):
+                dst = os.path.join(PROJECTS_DIR, entry)
+                if os.path.exists(dst):
+                    shutil.rmtree(dst)
+                shutil.copytree(src, dst)
+
+        flash("Website data imported successfully. You may need to reload the site to see changes.")
+    except Exception as error:
+        flash(f"Import failed: {error}")
+        if project_backup and os.path.isdir(project_backup):
+            if os.path.isdir(PROJECTS_DIR):
+                shutil.rmtree(PROJECTS_DIR)
+            shutil.copytree(project_backup, PROJECTS_DIR)
+        if db_backup and os.path.exists(db_backup):
+            shutil.copy2(db_backup, DB_PATH)
+    finally:
+        shutil.rmtree(temp_root, ignore_errors=True)
+        if project_backup:
+            shutil.rmtree(project_backup, ignore_errors=True)
+
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/banned-status")
+def banned_status():
+    ban = current_ban()
+    return jsonify({"banned": bool(ban)})
 
 
 @app.route("/admin/projects/<int:pid>/delete", methods=["POST"])

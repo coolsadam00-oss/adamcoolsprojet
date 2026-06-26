@@ -91,6 +91,7 @@
               <form method="post" action="/messages/{{ friend.id }}" class="friend-message-form">
                 <input name="body" maxlength="1000" placeholder="Send a safe message..." required>
                 <button type="submit">Send</button>
+                <span class="message-status" aria-live="polite"></span>
               </form>
             </article>
           {% else %}
@@ -141,6 +142,43 @@
       </form>
     </section>
   </main>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      document.querySelectorAll('.friend-message-form').forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+          event.preventDefault();
+          var status = form.querySelector('.message-status');
+          var formData = new FormData(form);
+          var action = form.getAttribute('action');
+          status.textContent = 'Sending...';
+          fetch(action, {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+          })
+            .then(function (response) {
+              if (!response.ok) {
+                return response.json().then(function (data) {
+                  throw new Error(data.error || 'Send failed.');
+                });
+              }
+              return response.json();
+            })
+            .then(function (data) {
+              status.textContent = data.message || 'Message sent.';
+              form.querySelector('input[name="body"]').value = '';
+              setTimeout(function () {
+                status.textContent = '';
+              }, 3000);
+            })
+            .catch(function (error) {
+              status.textContent = error.message || 'Failed to send.';
+            });
+        });
+      });
+    });
+  </script>
   <script src="/static/theme.js"></script>
 </body>
 </html>

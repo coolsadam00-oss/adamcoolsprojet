@@ -13,10 +13,10 @@
     <a class="brand brand-lockup" href="/"><img src="/static/site-icon.svg" alt=""> <span>{{ site_name }}</span></a>
     <div class="search">
       <form method="get" action="/">
-        <input id="searchInput" name="q" list="gameSuggestions" placeholder="Search games or players..." value="{{ visible_q|e }}" autocomplete="off" />
-        <datalist id="gameSuggestions"></datalist>
+        <input id="searchInput" name="q" placeholder="Search games or players..." value="{{ visible_q|e }}" autocomplete="off" />
         <button type="submit">Search</button>
       </form>
+      <div id="searchSuggestions" class="search-suggestions" aria-live="polite" hidden></div>
     </div>
     <div class="actions">
       {% if is_admin %}
@@ -118,7 +118,7 @@
   <script>
     (function () {
       var input = document.getElementById("searchInput");
-      var suggestions = document.getElementById("gameSuggestions");
+      var suggestions = document.getElementById("searchSuggestions");
       if (!input || !suggestions || !window.fetch) return;
       var timer;
       function updateSuggestions() {
@@ -127,16 +127,40 @@
           fetch("/search/suggestions?q=" + encodeURIComponent(input.value), {
             credentials: "same-origin"
           })
-            .then(function (response) { return response.ok ? response.json() : {suggestions: []}; })
+            .then(function (response) { return response.ok ? response.json() : {items: []}; })
             .then(function (data) {
+              var items = data.items || data.suggestions || [];
               suggestions.innerHTML = "";
-              (data.suggestions || []).forEach(function (title) {
-                var option = document.createElement("option");
-                option.value = title;
-                suggestions.appendChild(option);
+              if (!items.length) {
+                suggestions.hidden = true;
+                return;
+              }
+              items.slice(0, 6).forEach(function (item) {
+                var itemEl = document.createElement("a");
+                var thumbEl = document.createElement("span");
+                var copyEl = document.createElement("span");
+                var titleEl = document.createElement("strong");
+                var subtitleEl = document.createElement("span");
+                itemEl.className = "search-suggestion";
+                itemEl.href = item.url || "#";
+                thumbEl.className = "search-suggestion-thumb";
+                if (item.image) {
+                  thumbEl.style.backgroundImage = "url(" + JSON.stringify(item.image) + ")";
+                }
+                copyEl.className = "search-suggestion-copy";
+                titleEl.textContent = item.title || "";
+                subtitleEl.textContent = item.subtitle || "";
+                copyEl.appendChild(titleEl);
+                copyEl.appendChild(subtitleEl);
+                itemEl.appendChild(thumbEl);
+                itemEl.appendChild(copyEl);
+                suggestions.appendChild(itemEl);
               });
+              suggestions.hidden = false;
             })
-            .catch(function () {});
+            .catch(function () {
+              suggestions.hidden = true;
+            });
         }, 120);
       }
       input.addEventListener("input", updateSuggestions);

@@ -35,6 +35,14 @@ a{color:inherit}
 .brand-lockup span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .topbar .search{flex:1;margin:0 18px}
 .topbar .search form{display:flex;gap:8px}
+.search{position:relative}
+.search-suggestions{position:absolute;left:0;right:0;top:calc(100% + 8px);display:grid;gap:4px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);box-shadow:0 14px 40px rgba(0,0,0,0.28);z-index:20}
+.search-suggestion{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;text-decoration:none}
+.search-suggestion:hover,.search-suggestion:focus{background:var(--accent-soft);outline:none}
+.search-suggestion-thumb{width:38px;height:38px;border-radius:8px;background:var(--card) center/cover no-repeat;border:1px solid var(--border);flex:0 0 auto}
+.search-suggestion-copy{display:grid;gap:2px;min-width:0}
+.search-suggestion-copy strong,.search-suggestion-copy span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.search-suggestion-copy span{color:var(--muted);font-size:12px}
 .topbar input{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
 .topbar button{margin-left:8px;padding:8px 12px;border-radius:8px;border:none;background:var(--accent);color:#fff}
 .topbar .actions .btn{background:var(--accent);padding:8px 12px;border-radius:8px;color:#fff;text-decoration:none}
@@ -43,6 +51,8 @@ a{color:inherit}
 .actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .inline-form{display:inline}
 .inline-form button{margin-left:0}
+.file-upload{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:8px;background:var(--border);color:var(--text);border:1px solid var(--border);cursor:pointer}
+.file-upload input{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .profile-chip{display:inline-flex;align-items:center;gap:8px;padding:5px 10px 5px 5px;border:1px solid var(--border);border-radius:999px;background:var(--card);color:var(--text);text-decoration:none;max-width:220px}
 .profile-avatar{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--accent);color:#f8fafc;font-weight:800;font-size:14px;flex:0 0 auto}
 .profile-avatar.large{width:54px;height:54px;font-size:22px}
@@ -155,6 +165,9 @@ button.small{padding:6px 10px;font-size:13px}
 
 .account-main{max-width:720px;margin:28px auto;padding:0 18px}
 .account-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px}
+.friend-message-form{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:10px}
+.friend-message-form input{min-width:0;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
+.message-status{grid-column:1/-1;min-height:1.2em;color:var(--muted);font-size:13px}
 .profile-form{margin-top:18px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
 .profile-form h2{margin:0 0 8px;font-size:20px}
 .profile-preview{display:flex;align-items:center;gap:12px;margin:12px 0 4px}
