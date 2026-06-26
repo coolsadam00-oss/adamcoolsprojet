@@ -93,41 +93,53 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertIn(b'closest("form")', response.data)
         self.assertNotIn(b'closest(".search")', response.data)
 
-    def test_search_suggestions_returns_last_three_played_game_previews(self):
+    def test_search_suggestions_returns_first_three_games_or_users(self):
         with site.app.app_context():
             db = site.get_db()
-            for project_id, title in [
-                (10, "First Played"),
-                (11, "Second Played"),
-                (12, "Third Played"),
-                (13, "Latest Played"),
+            for project_id, title, description in [
+                (10, "Space Runner", "Fast space game"),
+                (11, "Space Builder", "Build in space"),
+                (12, "Space Adventure", "Explore space"),
+                (13, "Space Extra", "Fourth result"),
             ]:
                 db.execute(
                     "INSERT INTO projects (id, title, description, tags, folder, created_at, thumbnail) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (project_id, title, "Played game", "played,arcade", str(project_id), "now", "thumb.png"),
+                    (project_id, title, description, "space,arcade", str(project_id), "now", "thumb.png"),
                 )
-                db.execute(
-                    "INSERT INTO player_activity "
-                    "(visitor_id, project_id, action, details, created_at) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    ("visitor", project_id, "open_game_page", title, f"2026-01-0{project_id - 9}"),
-                )
-            site.upsert_user("playedfan@example.com", "Played Fan", "/static/avatar.png")
+            site.upsert_user("spacefan@example.com", "Space Fan", "/static/avatar.png")
             db.commit()
 
-        response = self.client.get("/search/suggestions?q=played")
+        response = self.client.get("/search/suggestions?q=space")
         data = response.get_json()
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual([item["title"] for item in data["items"]], [
-            "Latest Played",
-            "Third Played",
-            "Second Played",
+            "Space Runner",
+            "Space Builder",
+            "Space Adventure",
         ])
-        self.assertTrue(all(item["type"] == "game" for item in data["items"]))
+        self.assertIn("game", {item["type"] for item in data["items"]})
         self.assertLessEqual(len(data["items"]), 3)
-        self.assertNotIn("Played Fan", [item["title"] for item in data["items"]])
+
+    def test_search_suggestions_can_show_users_in_first_three_results(self):
+        with site.app.app_context():
+            db = site.get_db()
+            site.upsert_user("alex@example.com", "Alex Player", "/static/avatar.png")
+            db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Alex Game", "Game by Alex", "alex", "1", "now"),
+            )
+            db.commit()
+
+        response = self.client.get("/search/suggestions?q=alex")
+        data = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(len(data["items"]), 3)
+        self.assertIn("user", {item["type"] for item in data["items"]})
+        self.assertIn("Alex Player", [item["title"] for item in data["items"]])
 
     def test_guest_can_view_project(self):
         with site.app.app_context():

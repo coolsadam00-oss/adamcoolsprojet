@@ -1086,33 +1086,58 @@ def index():
 def search_suggestions():
     q = " ".join(request.args.get("q", "").split())[:60]
     db = get_db()
-    params = []
-    filters = ["p.title IS NOT NULL"]
+    suggestions = []
     if q:
         like = f"%{q}%"
-        filters.append("(p.title LIKE ? OR p.description LIKE ? OR p.tags LIKE ?)")
-        params.extend([like, like, like])
-    rows = db.execute(
-        "SELECT p.id, p.title, p.description, p.thumbnail, MAX(pa.id) AS last_played "
-        "FROM projects p "
-        "JOIN player_activity pa ON pa.project_id = p.id "
-        "AND pa.action IN ('open_game_page', 'active_play') "
-        f"WHERE {' AND '.join(filters)} "
-        "GROUP BY p.id "
-        "ORDER BY last_played DESC, p.id DESC LIMIT 3",
-        params,
-    ).fetchall()
-    suggestions = [
-        {
-            "type": "game",
-            "title": row["title"],
-            "subtitle": row["description"] or "",
-            "url": f"/project/{row['id']}",
-            "image": f"/project_files/{row['id']}/{row['thumbnail']}" if row["thumbnail"] else "/static/site-icon.svg",
-        }
-        for row in rows
-        if row["title"]
-    ]
+        project_rows = db.execute(
+            "SELECT id, title, description, thumbnail FROM projects "
+            "WHERE title LIKE ? OR description LIKE ? OR tags LIKE ? "
+            "ORDER BY CASE WHEN title LIKE ? THEN 0 ELSE 1 END, id ASC LIMIT 3",
+            (like, like, like, f"{q}%"),
+        ).fetchall()
+        suggestions.extend(
+            {
+                "type": "game",
+                "title": row["title"],
+                "subtitle": row["description"] or "",
+                "url": f"/project/{row['id']}",
+                "image": f"/project_files/{row['id']}/{row['thumbnail']}" if row["thumbnail"] else "/static/site-icon.svg",
+            }
+            for row in project_rows
+            if row["title"]
+        )
+        if len(suggestions) < 3:
+            user_rows = db.execute(
+                "SELECT id, name, username, email, picture FROM users "
+                "WHERE name LIKE ? OR username LIKE ? OR email LIKE ? "
+                "ORDER BY name LIMIT ?",
+                (like, like, like, 3 - len(suggestions)),
+            ).fetchall()
+            suggestions.extend(
+                {
+                    "type": "user",
+                    "title": row["name"] or row["username"] or (row["email"] or "").split("@")[0],
+                    "subtitle": "Player",
+                    "url": f"/?q={urllib.parse.quote_plus(row['name'] or row['username'] or row['email'] or '')}",
+                    "image": row["picture"] or "/static/site-icon.svg",
+                }
+                for row in user_rows
+            )
+    else:
+        rows = db.execute(
+            "SELECT id, title, description, thumbnail FROM projects ORDER BY id DESC LIMIT 3",
+        ).fetchall()
+        suggestions.extend(
+            {
+                "type": "game",
+                "title": row["title"],
+                "subtitle": row["description"] or "",
+                "url": f"/project/{row['id']}",
+                "image": f"/project_files/{row['id']}/{row['thumbnail']}" if row["thumbnail"] else "/static/site-icon.svg",
+            }
+            for row in rows
+            if row["title"]
+        )
     return jsonify({"items": suggestions})
 
 
