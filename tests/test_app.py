@@ -285,6 +285,25 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(user["is_admin"], 1)
         self.assertEqual(user["email_verified"], 1)
 
+    def test_startup_keeps_existing_owner_password_hash(self):
+        with site.app.app_context():
+            db = site.get_db()
+            custom_hash = site.generate_password_hash("imported-owner-pass")
+            db.execute(
+                "UPDATE users SET password_hash = ?, email_verified = 1 WHERE email = ?",
+                (custom_hash, ADMIN_EMAIL),
+            )
+            db.commit()
+
+            site.seed_premade_account(db)
+            db.commit()
+            user = db.execute(
+                "SELECT * FROM users WHERE email = ?",
+                (ADMIN_EMAIL,),
+            ).fetchone()
+
+        self.assertTrue(check_password_hash(user["password_hash"], "imported-owner-pass"))
+
     def test_upload_requires_admin(self):
         self.login("player@example.com", "Player")
 
@@ -1232,24 +1251,37 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.login()
         with site.app.app_context():
             db = site.get_db()
+            user = site.create_password_user("exporttest", "secret123", "exporttest@example.com")
             db.execute(
-                "INSERT INTO projects (title, description, tags, folder, created_at, thumbnail) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                ("Data Game", "Backup item", "backup", "1", "now", "thumb.png"),
+                "INSERT INTO avatar_options (label, image_url, created_at) "
+                "VALUES (?, ?, ?)",
+                ("Saved Pic", "/project_files/1/thumb.png", "now"),
+            )
+            cur = db.execute(
+                "INSERT INTO projects "
+                "(title, description, tags, folder, created_at, thumbnail, source_zip) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("Data Game", "Backup item", "backup", "1", "now", "thumb.png", "source.zip"),
             )
             db.commit()
-            project_id = db.execute("SELECT id FROM projects WHERE title = ?", ("Data Game",)).fetchone()["id"]
+            project_id = cur.lastrowid
+            db.execute(
+                "UPDATE projects SET folder = ? WHERE id = ?",
+                (str(project_id), project_id),
+            )
+            db.execute(
+                "INSERT INTO favorites (user_id, project_id, created_at) VALUES (?, ?, ?)",
+                (user["id"], project_id, "now"),
+            )
+            db.commit()
             folder = os.path.join(site.PROJECTS_DIR, str(project_id))
             os.makedirs(folder, exist_ok=True)
             with open(os.path.join(folder, "index.html"), "w", encoding="utf-8") as f:
                 f.write("<h1>Data Game</h1>")
             with open(os.path.join(folder, "thumb.png"), "wb") as f:
                 f.write(b"\x89PNG\r\n\x1a\n")
-            db.execute(
-                "INSERT INTO users (email, username, name, created_at) VALUES (?, ?, ?, ?)",
-                ("exporttest@example.com", "exporttest", "Export Test", "now"),
-            )
-            db.commit()
+            with open(os.path.join(folder, "source.zip"), "wb") as f:
+                f.write(b"source")
 
         response = self.client.get("/admin/export-website-data")
 
@@ -1260,6 +1292,35 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertIn("users.json", archive.namelist())
         self.assertIn(f"{project_id}/index.html", archive.namelist())
         self.assertIn(f"{project_id}/thumb.png", archive.namelist())
+        self.assertIn(f"{project_id}/source.zip", archive.namelist())
+        exported_db_path = os.path.join(self.tmp, "exported.db")
+        with open(exported_db_path, "wb") as db_file:
+            db_file.write(archive.read("projects.db"))
+        exported = sqlite3.connect(exported_db_path)
+        exported.row_factory = sqlite3.Row
+        try:
+            exported_user = exported.execute(
+                "SELECT * FROM users WHERE username = ?",
+                ("exporttest",),
+            ).fetchone()
+            exported_project = exported.execute(
+                "SELECT * FROM projects WHERE id = ?",
+                (project_id,),
+            ).fetchone()
+            exported_favorite = exported.execute(
+                "SELECT * FROM favorites WHERE user_id = ? AND project_id = ?",
+                (user["id"], project_id),
+            ).fetchone()
+            exported_avatar = exported.execute(
+                "SELECT * FROM avatar_options WHERE label = ?",
+                ("Saved Pic",),
+            ).fetchone()
+        finally:
+            exported.close()
+        self.assertEqual(exported_project["thumbnail"], "thumb.png")
+        self.assertTrue(check_password_hash(exported_user["password_hash"], "secret123"))
+        self.assertIsNotNone(exported_favorite)
+        self.assertEqual(exported_avatar["image_url"], "/project_files/1/thumb.png")
 
     def test_admin_can_import_website_data_zip(self):
         self.login()
@@ -1298,6 +1359,106 @@ class SiteAuthAdminTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn("/admin", response.headers["Location"])
+
+    def test_admin_import_restores_full_exported_site_data(self):
+        self.login()
+        with site.app.app_context():
+            db = site.get_db()
+            user = site.create_password_user("savedplayer", "savedpass123", "saved@example.com")
+            db.execute(
+                "INSERT INTO avatar_options (label, image_url, created_at) VALUES (?, ?, ?)",
+                ("Saved Avatar", "/static/saved-avatar.svg", "now"),
+            )
+            cur = db.execute(
+                "INSERT INTO projects "
+                "(title, description, tags, folder, created_at, thumbnail, source_zip, "
+                "source_token, runtime_language, entry_file) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "Saved Game",
+                    "Everything should come back",
+                    "save",
+                    "1",
+                    "now",
+                    "thumb.png",
+                    "source.zip",
+                    "tok",
+                    "html",
+                    "index.html",
+                ),
+            )
+            project_id = cur.lastrowid
+            db.execute("UPDATE projects SET folder = ? WHERE id = ?", (str(project_id), project_id))
+            db.execute(
+                "INSERT INTO comments (project_id, user_id, body, created_at) VALUES (?, ?, ?, ?)",
+                (project_id, user["id"], "Saved comment", "now"),
+            )
+            db.commit()
+            folder = os.path.join(site.PROJECTS_DIR, str(project_id))
+            os.makedirs(folder, exist_ok=True)
+            with open(os.path.join(folder, "index.html"), "w", encoding="utf-8") as f:
+                f.write("<h1>Saved Game</h1>")
+            with open(os.path.join(folder, "thumb.png"), "wb") as f:
+                f.write(b"thumb")
+            with open(os.path.join(folder, "source.zip"), "wb") as f:
+                f.write(b"source")
+
+        export_response = self.client.get("/admin/export-website-data")
+        backup_zip = io.BytesIO(export_response.data)
+        with site.app.app_context():
+            db = site.get_db()
+            db.execute("DELETE FROM comments")
+            db.execute("DELETE FROM projects")
+            db.execute("DELETE FROM avatar_options WHERE label = ?", ("Saved Avatar",))
+            db.execute("DELETE FROM users WHERE username = ?", ("savedplayer",))
+            db.commit()
+        shutil.rmtree(site.PROJECTS_DIR)
+        os.makedirs(site.PROJECTS_DIR, exist_ok=True)
+        os.makedirs(os.path.join(site.PROJECTS_DIR, "stale"), exist_ok=True)
+        backup_zip.seek(0)
+
+        import_response = self.client.post(
+            "/admin/import-website-data",
+            data={"backup": (backup_zip, "website-data.zip")},
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(import_response.status_code, 302)
+        with site.app.app_context():
+            restored_user = site.get_db().execute(
+                "SELECT * FROM users WHERE username = ?",
+                ("savedplayer",),
+            ).fetchone()
+            restored_project = site.get_db().execute(
+                "SELECT * FROM projects WHERE title = ?",
+                ("Saved Game",),
+            ).fetchone()
+            restored_comment = site.get_db().execute(
+                "SELECT * FROM comments WHERE body = ?",
+                ("Saved comment",),
+            ).fetchone()
+            restored_avatar = site.get_db().execute(
+                "SELECT * FROM avatar_options WHERE label = ?",
+                ("Saved Avatar",),
+            ).fetchone()
+        self.assertTrue(check_password_hash(restored_user["password_hash"], "savedpass123"))
+        self.assertEqual(restored_project["thumbnail"], "thumb.png")
+        self.assertIsNotNone(restored_comment)
+        self.assertEqual(restored_avatar["image_url"], "/static/saved-avatar.svg")
+        self.assertTrue(os.path.exists(os.path.join(site.PROJECTS_DIR, str(restored_project["id"]), "index.html")))
+        self.assertTrue(os.path.exists(os.path.join(site.PROJECTS_DIR, str(restored_project["id"]), "thumb.png")))
+        self.assertTrue(os.path.exists(os.path.join(site.PROJECTS_DIR, str(restored_project["id"]), "source.zip")))
+        self.assertFalse(os.path.exists(os.path.join(site.PROJECTS_DIR, "stale")))
+
+        self.client.post("/logout")
+        login_response = self.client.post(
+            "/login",
+            data={"email": "savedplayer", "password": "savedpass123"},
+        )
+        game_response = self.client.get(f"/project/{restored_project['id']}")
+
+        self.assertEqual(login_response.status_code, 302)
+        self.assertEqual(game_response.status_code, 200)
 
     def test_banned_status_endpoint_reports_active_ban(self):
         self.login("badplayer@example.com", "Bad Player")

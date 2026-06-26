@@ -398,7 +398,7 @@ def seed_default_avatars(db):
         )
 
 
-def seed_premade_account(db):
+def seed_premade_account(db, repair_password=False):
     now = datetime.datetime.now(datetime.UTC).isoformat()
     password_hash = generate_password_hash(PREMADE_ACCOUNT_PASSWORD)
     existing = db.execute(
@@ -406,10 +406,11 @@ def seed_premade_account(db):
         (ADMIN_EMAIL,),
     ).fetchone()
     if existing:
+        password_expr = "?" if repair_password else "COALESCE(NULLIF(password_hash, ''), ?)"
         db.execute(
             "UPDATE users SET name = COALESCE(NULLIF(name, ''), ?), "
             "username = COALESCE(NULLIF(username, ''), ?), "
-            "is_admin = 1, password_hash = ?, email_verified = 1, "
+            f"is_admin = 1, password_hash = {password_expr}, email_verified = 1, "
             "verification_token = NULL WHERE id = ?",
             (ADMIN_EMAIL.split("@")[0], ADMIN_LOGIN.lower(), password_hash, existing["id"]),
         )
@@ -890,7 +891,7 @@ def authenticate_password_user(identifier, password):
     db = get_db()
     identifier = identifier.strip().lower()
     if identifier in {ADMIN_LOGIN.lower(), ADMIN_EMAIL}:
-        seed_premade_account(db)
+        seed_premade_account(db, repair_password=True)
         db.commit()
     user = lookup_user_by_identifier(identifier)
     if not user or not user["password_hash"]:
@@ -1934,14 +1935,35 @@ def export_table_to_json(zipf, db, table_name):
     zipf.writestr(f"{table_name}.json", json.dumps(rows, default=str, indent=2))
 
 
+def write_database_snapshot(zipf):
+    if not os.path.exists(DB_PATH):
+        return
+    snapshot_fd, snapshot_path = tempfile.mkstemp(suffix=".db", dir=DATA_DIR)
+    os.close(snapshot_fd)
+    source = get_db()
+    target = sqlite3.connect(snapshot_path)
+    try:
+        source.backup(target)
+        target.close()
+        zipf.write(snapshot_path, os.path.basename(DB_PATH))
+    finally:
+        try:
+            target.close()
+        except sqlite3.Error:
+            pass
+        try:
+            os.remove(snapshot_path)
+        except OSError:
+            pass
+
+
 @app.route("/admin/export-website-data")
 @admin_required
 def export_website_data():
     memory_file = io.BytesIO()
     with zipfile.ZipFile(memory_file, "w", zipfile.ZIP_DEFLATED) as archive:
-        if os.path.exists(DB_PATH):
-            archive.write(DB_PATH, os.path.basename(DB_PATH))
         db = get_db()
+        write_database_snapshot(archive)
         for table_name in [
             "users",
             "friendships",
@@ -2012,6 +2034,9 @@ def import_website_data():
             shutil.copytree(PROJECTS_DIR, project_backup)
 
         shutil.copy2(imported_db_path, DB_PATH)
+        if os.path.isdir(PROJECTS_DIR):
+            shutil.rmtree(PROJECTS_DIR)
+        os.makedirs(PROJECTS_DIR, exist_ok=True)
         backups_import = os.path.join(temp_root, "backups")
         if os.path.isdir(backups_import):
             if os.path.isdir(BACKUPS_DIR):
