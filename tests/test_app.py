@@ -8,6 +8,7 @@ import zipfile
 from unittest import mock
 
 import app as site
+from werkzeug.security import check_password_hash
 
 
 ADMIN_EMAIL = "coolsadam00@gmail.com"
@@ -1422,6 +1423,59 @@ class SiteAuthAdminTests(unittest.TestCase):
             ).fetchone()
         self.assertEqual(user["is_admin"], 0)
         self.assertIsNotNone(ban)
+
+    def test_owner_can_change_user_password(self):
+        self.login()
+        with site.app.app_context():
+            user = site.create_password_user("resetme", "oldsecret123", "resetme@example.com")
+
+        response = self.client.post(
+            f"/admin/users/{user['id']}/password",
+            data={"password": "newsecret123"},
+        )
+        self.client.post("/logout")
+        login_response = self.client.post(
+            "/login",
+            data={"email": "resetme", "password": "newsecret123"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(login_response.status_code, 302)
+        with self.client.session_transaction() as session:
+            self.assertIn("user_id", session)
+
+    def test_regular_admin_cannot_change_user_password(self):
+        mod_id = self.login("mod@example.com", "Mod")
+        with site.app.app_context():
+            db = site.get_db()
+            db.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (mod_id,))
+            user = site.create_password_user("resetme", "oldsecret123", "resetme@example.com")
+            db.commit()
+
+        response = self.client.post(
+            f"/admin/users/{user['id']}/password",
+            data={"password": "newsecret123"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        with site.app.app_context():
+            stored = site.get_db().execute(
+                "SELECT password_hash FROM users WHERE id = ?",
+                (user["id"],),
+            ).fetchone()
+        self.assertTrue(check_password_hash(stored["password_hash"], "oldsecret123"))
+
+    def test_owner_user_list_has_password_reset_without_showing_hashes(self):
+        self.login()
+        with site.app.app_context():
+            user = site.create_password_user("resetme", "oldsecret123", "resetme@example.com")
+
+        response = self.client.get("/admin")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(f"/admin/users/{user['id']}/password".encode(), response.data)
+        self.assertIn(b"Password: set", response.data)
+        self.assertNotIn(user["password_hash"].encode(), response.data)
 
     def test_admin_can_add_profile_picture_option(self):
         self.login()

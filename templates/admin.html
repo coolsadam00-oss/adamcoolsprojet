@@ -148,8 +148,17 @@
             <div>
               <strong>{{ u.name or u.username or u.email }}</strong>
               <p class="muted">{{ u.username or 'no username' }}{% if u.email %} - {{ u.email }}{% endif %}{% if u.is_admin %} - admin{% endif %}</p>
+              {% if owner_mode %}
+                <p class="muted">Password: {% if u.password_hash %}set{% else %}not set{% endif %}</p>
+              {% endif %}
             </div>
             <div class="admin-actions-stack">
+              {% if owner_mode %}
+                <form method="post" action="/admin/users/{{ u.id }}/password" class="password-admin-form">
+                  <input name="password" type="password" minlength="8" placeholder="New password" autocomplete="new-password" required>
+                  <button type="submit">Change password</button>
+                </form>
+              {% endif %}
               {% if not u.is_admin %}
                 <form method="post" action="/admin/users/{{ u.id }}/make-admin">
                   <button type="submit">Make admin</button>

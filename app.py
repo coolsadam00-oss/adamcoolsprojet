@@ -1902,6 +1902,7 @@ def admin_panel():
         bans=bans,
         q=q,
         lulu_message=None,
+        owner_mode=is_owner(),
     )
 
 
@@ -2092,6 +2093,34 @@ def make_admin(user_id):
     return redirect(url_for("admin_panel"))
 
 
+@app.route("/admin/users/<int:user_id>/password", methods=["POST"])
+@admin_required
+def change_user_password(user_id):
+    if not is_owner():
+        abort(403)
+    password = request.form.get("password", "")
+    if len(password) < 8:
+        flash("Password must be at least 8 characters.")
+        return redirect(url_for("admin_panel"))
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not user:
+        abort(404)
+    db.execute(
+        "UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = ?",
+        (generate_password_hash(password), user_id),
+    )
+    log_admin_activity(
+        "change_user_password",
+        "user",
+        user_id,
+        f"Changed password for: {user_label(user)}",
+    )
+    db.commit()
+    flash("User password changed.")
+    return redirect(url_for("admin_panel"))
+
+
 def ensure_can_moderate_user(target):
     if target["email"] == ADMIN_EMAIL:
         abort(403)
@@ -2231,6 +2260,7 @@ def lulu():
             ).fetchall(),
             q="",
             lulu_message=error,
+            owner_mode=is_owner(),
         ), 400
     log_admin_activity("lulu_command", "settings", None, message or "")
     get_db().commit()
@@ -2248,6 +2278,7 @@ def lulu():
         ).fetchall(),
         q="",
         lulu_message=message,
+        owner_mode=is_owner(),
     )
 
 
