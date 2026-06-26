@@ -152,7 +152,7 @@
                 suggestions.hidden = true;
                 return;
               }
-              items.slice(0, 6).forEach(function (item) {
+              items.slice(0, 3).forEach(function (item) {
                 var itemEl = document.createElement("a");
                 var thumbEl = document.createElement("span");
                 var copyEl = document.createElement("span");
@@ -192,9 +192,7 @@
       if (searchBox) {
         searchBox.addEventListener("mouseenter", showSuggestions);
         searchBox.addEventListener("mouseleave", function () {
-          if (document.activeElement !== input) {
-            hideSuggestions();
-          }
+          hideSuggestions();
         });
       }
     }());
