@@ -105,6 +105,7 @@ button.danger{background:var(--danger)}
 .rating-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .rating-form label{font-size:13px;color:var(--muted)}
 .rating-form select{padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
+.game-toolbar{max-width:980px;margin:8px auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .iframe-wrap{max-width:980px;margin:8px auto}
 .iframe-wrap iframe{width:100%;height:min(80vh,760px);border:1px solid var(--border);border-radius:8px;background:var(--surface)}
 .btn.small{padding:6px 10px;font-size:13px}

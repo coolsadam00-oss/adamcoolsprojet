@@ -73,8 +73,13 @@
       {% endwith %}
     </div>
     {% if index_file %}
-      <p><a class="btn small" href="/project_files/{{ project.id }}/{{ index_file }}" target="_blank">Open in new tab</a></p>
-      <div class="iframe-wrap"><iframe src="/project_files/{{ project.id }}/{{ index_file }}"></iframe></div>
+      <div class="game-toolbar">
+        <a class="btn small" href="/project_files/{{ project.id }}/{{ index_file }}" target="_blank">Open in new tab</a>
+        <button id="fullscreenButton" class="small" type="button">Fullscreen</button>
+      </div>
+      <div class="iframe-wrap">
+        <iframe id="gameFrame" src="/project_files/{{ project.id }}/{{ index_file }}" allowfullscreen></iframe>
+      </div>
     {% else %}
       <p>No index.html found in this project.</p>
     {% endif %}
@@ -134,6 +139,18 @@
       sendHeartbeat();
       setInterval(sendHeartbeat, 30000);
       document.addEventListener("visibilitychange", sendHeartbeat);
+    }());
+    (function () {
+      var button = document.getElementById("fullscreenButton");
+      var frame = document.getElementById("gameFrame");
+      if (!button || !frame) return;
+      button.addEventListener("click", function () {
+        if (frame.requestFullscreen) {
+          frame.requestFullscreen();
+        } else if (frame.webkitRequestFullscreen) {
+          frame.webkitRequestFullscreen();
+        }
+      });
     }());
   </script>
   <script src="/static/theme.js"></script>

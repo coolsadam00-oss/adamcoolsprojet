@@ -161,6 +161,30 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Guest Game", response.data)
 
+    def test_project_view_has_fullscreen_button_for_game_frame(self):
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Fullscreen Game", "", "", "1", "now"),
+            )
+            db.commit()
+            project_id = cur.lastrowid
+            folder = os.path.join(site.PROJECTS_DIR, str(project_id))
+            os.makedirs(folder, exist_ok=True)
+            with open(os.path.join(folder, "index.html"), "w", encoding="utf-8") as f:
+                f.write("<h1>Fullscreen Game</h1>")
+
+        response = self.client.get(f"/project/{project_id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'id="gameFrame"', response.data)
+        self.assertIn(b'id="fullscreenButton"', response.data)
+        self.assertIn(b"Fullscreen", response.data)
+        self.assertIn(b"allowfullscreen", response.data)
+        self.assertIn(b"requestFullscreen", response.data)
+
     def test_project_view_logs_player_monitoring_activity(self):
         self.login("player@example.com", "Player")
         with site.app.app_context():
