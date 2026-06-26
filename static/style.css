@@ -190,6 +190,7 @@ button.small{padding:6px 10px;font-size:13px}
 .admin-search,.lulu-form{display:flex;gap:8px;flex:1;min-width:min(280px,100%)}
 .admin-search input,.lulu-form input,.avatar-admin-form input,.password-admin-form input,.project-metadata-form input,.project-metadata-form textarea{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
 .admin-section{margin-top:22px}
+.player-admin-search{margin:0 0 12px}
 .admin-list{display:grid;gap:10px}
 .admin-row{display:flex;justify-content:space-between;gap:16px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px}
 .admin-row p{margin:4px 0 0}

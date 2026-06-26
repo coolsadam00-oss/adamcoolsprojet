@@ -1917,6 +1917,7 @@ def project_file_list(pid):
 @admin_required
 def admin_panel():
     q = request.args.get("q", "").strip()
+    player_q = request.args.get("player_q", "").strip()
     db = get_db()
     if q:
         like = f"%{q}%"
@@ -1924,13 +1925,28 @@ def admin_panel():
             "SELECT * FROM projects WHERE title LIKE ? OR description LIKE ? OR tags LIKE ? ORDER BY id DESC",
             (like, like, like),
         ).fetchall()
-        users = db.execute(
-            "SELECT * FROM users WHERE email LIKE ? OR name LIKE ? OR username LIKE ? ORDER BY last_login DESC",
-            (like, like, like),
-        ).fetchall()
     else:
         projects = db.execute("SELECT * FROM projects ORDER BY id DESC").fetchall()
-        users = db.execute("SELECT * FROM users ORDER BY last_login DESC").fetchall()
+    user_search = player_q or q
+    user_select = (
+        "SELECT u.*, "
+        "(SELECT b.id FROM user_bans b "
+        "WHERE b.user_id = u.id AND b.lifted_at IS NULL "
+        "AND (b.expires_at IS NULL OR b.expires_at > ?) "
+        "ORDER BY b.id DESC LIMIT 1) AS active_ban_id "
+        "FROM users u "
+    )
+    now = datetime.datetime.now(datetime.UTC).isoformat()
+    if user_search:
+        like = f"%{user_search}%"
+        users = db.execute(
+            user_select
+            + "WHERE u.email LIKE ? OR u.name LIKE ? OR u.username LIKE ? "
+            + "ORDER BY u.last_login DESC",
+            (now, like, like, like),
+        ).fetchall()
+    else:
+        users = db.execute(user_select + "ORDER BY u.last_login DESC", (now,)).fetchall()
     projects = [dict(project) for project in projects]
     for project in projects:
         project["files"] = project_file_list(project["id"])
@@ -1955,6 +1971,7 @@ def admin_panel():
         security_alerts=recent_security_alerts(),
         bans=bans,
         q=q,
+        player_q=player_q,
         lulu_message=None,
         owner_mode=is_owner(),
     )

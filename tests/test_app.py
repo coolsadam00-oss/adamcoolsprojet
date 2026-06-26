@@ -1609,6 +1609,30 @@ class SiteAuthAdminTests(unittest.TestCase):
             ).fetchone()
         self.assertIsNone(ban)
 
+    def test_admin_player_search_shows_fast_user_actions(self):
+        self.login()
+        with site.app.app_context():
+            db = site.get_db()
+            quick_user = site.upsert_user("quick@example.com", "Quick Player")
+            other_user = site.upsert_user("slow@example.com", "Slow Player")
+            db.execute(
+                "INSERT INTO user_bans (user_id, reason, created_at, expires_at) "
+                "VALUES (?, ?, ?, NULL)",
+                (quick_user["id"], "Fast check", "now"),
+            )
+            db.commit()
+
+        response = self.client.get("/admin?player_q=quick")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'name="player_q"', response.data)
+        self.assertIn(b'value="quick"', response.data)
+        self.assertIn(b"Quick Player", response.data)
+        self.assertNotIn(b"Slow Player", response.data)
+        self.assertIn(f"/admin/users/{quick_user['id']}/make-admin".encode(), response.data)
+        self.assertIn(f"/admin/users/{quick_user['id']}/ban".encode(), response.data)
+        self.assertIn(f"/admin/users/{quick_user['id']}/unban".encode(), response.data)
+
     def test_banned_user_sees_red_notice_and_cannot_open_games(self):
         user_id = self.login("badplayer@example.com", "Bad Player")
         with site.app.app_context():
