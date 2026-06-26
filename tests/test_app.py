@@ -87,6 +87,8 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertIn(b'id="searchSuggestions"', response.data)
         self.assertIn(b"search-suggestion-thumb", response.data)
         self.assertIn(b"item.image", response.data)
+        self.assertIn(b'mouseenter"', response.data)
+        self.assertIn(b'mouseleave"', response.data)
 
     def test_search_suggestions_returns_game_and_user_previews(self):
         with site.app.app_context():

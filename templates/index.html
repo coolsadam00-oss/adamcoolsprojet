@@ -119,16 +119,33 @@
     (function () {
       var input = document.getElementById("searchInput");
       var suggestions = document.getElementById("searchSuggestions");
+      var searchBox = input ? input.closest(".search") : null;
       if (!input || !suggestions || !window.fetch) return;
       var timer;
+      var active = false;
+      function hideSuggestions() {
+        active = false;
+        clearTimeout(timer);
+        suggestions.hidden = true;
+      }
+      function showSuggestions() {
+        active = true;
+        updateSuggestions();
+      }
       function updateSuggestions() {
+        if (!active) {
+          suggestions.hidden = true;
+          return;
+        }
         clearTimeout(timer);
         timer = setTimeout(function () {
+          if (!active) return;
           fetch("/search/suggestions?q=" + encodeURIComponent(input.value), {
             credentials: "same-origin"
           })
             .then(function (response) { return response.ok ? response.json() : {items: []}; })
             .then(function (data) {
+              if (!active) return;
               var items = data.items || data.suggestions || [];
               suggestions.innerHTML = "";
               if (!items.length) {
@@ -164,7 +181,22 @@
         }, 120);
       }
       input.addEventListener("input", updateSuggestions);
-      updateSuggestions();
+      input.addEventListener("focus", showSuggestions);
+      input.addEventListener("blur", function () {
+        setTimeout(function () {
+          if (!searchBox || !searchBox.matches(":hover")) {
+            hideSuggestions();
+          }
+        }, 120);
+      });
+      if (searchBox) {
+        searchBox.addEventListener("mouseenter", showSuggestions);
+        searchBox.addEventListener("mouseleave", function () {
+          if (document.activeElement !== input) {
+            hideSuggestions();
+          }
+        });
+      }
     }());
   </script>
   <script src="/static/theme.js"></script>
