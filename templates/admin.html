@@ -74,6 +74,16 @@
                   </ul>
                 </details>
               {% endif %}
+              <form method="post" action="/admin/projects/{{ p.id }}/metadata" enctype="multipart/form-data" class="project-metadata-form">
+                <input name="title" value="{{ p.title|e }}" maxlength="100" placeholder="Game name" required>
+                <input name="tags" value="{{ p.tags|e }}" maxlength="300" placeholder="#tags or comma tags">
+                <textarea name="description" maxlength="500" placeholder="Description">{{ p.description }}</textarea>
+                <label class="file-upload">
+                  <input name="thumbnail" type="file" accept=".png,.jpg,.jpeg,.gif,.webp">
+                  Change thumbnail
+                </label>
+                <button type="submit">Save details</button>
+              </form>
             </div>
             <div class="admin-actions-stack">
               {% if p.source_zip %}

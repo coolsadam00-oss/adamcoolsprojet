@@ -935,6 +935,21 @@ def validate_platform_support(value):
     return value
 
 
+def normalize_tags(value):
+    raw_tags = re.split(r"[,\s]+", value.strip())
+    tags = []
+    seen = set()
+    for raw_tag in raw_tags:
+        tag = raw_tag.strip().lstrip("#").strip()
+        if not tag:
+            continue
+        tag = re.sub(r"[^a-zA-Z0-9_.-]+", "-", tag).strip("-")[:40]
+        if tag and tag.lower() not in seen:
+            tags.append(tag)
+            seen.add(tag.lower())
+    return ",".join(tags[:20])
+
+
 HTML_UPLOAD_EXTENSIONS = {
     ".html",
     ".htm",
@@ -1842,6 +1857,43 @@ def replace_project_source(pid):
     )
     db.commit()
     flash("Game files updated.")
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/projects/<int:pid>/metadata", methods=["POST"])
+@admin_required
+def update_project_metadata(pid):
+    db = get_db()
+    project = db.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+    if not project:
+        abort(404)
+    title = " ".join(request.form.get("title", "").split())[:100]
+    if not title:
+        flash("Game name is required.")
+        return redirect(url_for("admin_panel"))
+    description = " ".join(request.form.get("description", "").split())[:500]
+    tags = normalize_tags(request.form.get("tags", ""))
+    thumbnail = project["thumbnail"] or ""
+    folder = os.path.join(PROJECTS_DIR, str(pid))
+    try:
+        uploaded_thumbnail = save_thumbnail(request.files.get("thumbnail"), folder)
+    except ValueError as error:
+        flash(str(error))
+        return redirect(url_for("admin_panel"))
+    if uploaded_thumbnail:
+        thumbnail = uploaded_thumbnail
+    db.execute(
+        "UPDATE projects SET title = ?, description = ?, tags = ?, thumbnail = ? WHERE id = ?",
+        (title, description, tags, thumbnail, pid),
+    )
+    log_admin_activity(
+        "update_project_metadata",
+        "project",
+        pid,
+        f"Updated game details: {title}",
+    )
+    db.commit()
+    flash("Game details updated.")
     return redirect(url_for("admin_panel"))
 
 

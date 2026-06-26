@@ -187,12 +187,15 @@ button.small{padding:6px 10px;font-size:13px}
 .admin-main{max-width:1100px;margin:24px auto;padding:0 18px}
 .admin-header{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap}
 .admin-search,.lulu-form{display:flex;gap:8px;flex:1;min-width:min(280px,100%)}
-.admin-search input,.lulu-form input,.avatar-admin-form input,.password-admin-form input{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
+.admin-search input,.lulu-form input,.avatar-admin-form input,.password-admin-form input,.project-metadata-form input,.project-metadata-form textarea{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
 .admin-section{margin-top:22px}
 .admin-list{display:grid;gap:10px}
 .admin-row{display:flex;justify-content:space-between;gap:16px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px}
 .admin-row p{margin:4px 0 0}
 .admin-actions-stack{display:grid;gap:8px;justify-items:end}
+.project-metadata-form{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:8px;margin-top:12px;max-width:620px}
+.project-metadata-form textarea{grid-column:1/-1;min-height:74px;resize:vertical;font-family:inherit}
+.project-metadata-form button{justify-self:start}
 .password-admin-form{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .password-admin-form input{min-width:180px}
 .avatar-admin-form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
@@ -229,6 +232,7 @@ footer{padding:18px 20px;color:var(--muted);border-top:1px solid var(--border)}
   .admin-row form,.admin-row button{width:100%}
   .admin-search,.lulu-form,.avatar-admin-form{flex-direction:column}
   .admin-search button,.lulu-form button,.avatar-admin-form button{width:100%}
+  .project-metadata-form{grid-template-columns:1fr}
   .upload-main,.view-main,.admin-main{margin:18px auto;padding:0 14px}
   .view-header{padding:0}
   .iframe-wrap iframe{height:68vh}

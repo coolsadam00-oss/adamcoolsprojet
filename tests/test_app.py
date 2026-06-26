@@ -1227,6 +1227,65 @@ class SiteAuthAdminTests(unittest.TestCase):
         with open(os.path.join(site.PROJECTS_DIR, str(project["id"]), "index.html"), encoding="utf-8") as game_file:
             self.assertIn("Updated Game", game_file.read())
 
+    def test_admin_can_update_project_name_tags_and_thumbnail(self):
+        self.login()
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at, thumbnail) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                ("Old Title", "Old description", "old", "1", "now", "old-thumb.png"),
+            )
+            project_id = cur.lastrowid
+            db.commit()
+            folder = os.path.join(site.PROJECTS_DIR, str(project_id))
+            os.makedirs(folder, exist_ok=True)
+            with open(os.path.join(folder, "old-thumb.png"), "wb") as old_thumb:
+                old_thumb.write(b"old")
+
+        response = self.client.post(
+            f"/admin/projects/{project_id}/metadata",
+            data={
+                "title": "New Title",
+                "description": "New description",
+                "tags": "#stealth #arcade, fun",
+                "thumbnail": (io.BytesIO(b"new-thumb"), "cover.webp"),
+            },
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            project = site.get_db().execute(
+                "SELECT * FROM projects WHERE id = ?",
+                (project_id,),
+            ).fetchone()
+        self.assertEqual(project["title"], "New Title")
+        self.assertEqual(project["description"], "New description")
+        self.assertEqual(project["tags"], "stealth,arcade,fun")
+        self.assertEqual(project["thumbnail"], "thumbnail.webp")
+        self.assertTrue(os.path.exists(os.path.join(site.PROJECTS_DIR, str(project_id), "thumbnail.webp")))
+
+    def test_admin_project_editor_is_visible(self):
+        self.login()
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Editable Game", "", "old", "1", "now"),
+            )
+            db.commit()
+            project_id = cur.lastrowid
+
+        response = self.client.get("/admin")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(f"/admin/projects/{project_id}/metadata".encode(), response.data)
+        self.assertIn(b'name="title"', response.data)
+        self.assertIn(b'name="tags"', response.data)
+        self.assertIn(b'name="thumbnail"', response.data)
+
     def test_admin_can_delete_project(self):
         self.login()
         with site.app.app_context():
