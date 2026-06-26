@@ -90,6 +90,8 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertIn(b'mouseenter"', response.data)
         self.assertIn(b'mouseleave"', response.data)
         self.assertNotIn(b"document.activeElement !== input", response.data)
+        self.assertIn(b'closest("form")', response.data)
+        self.assertNotIn(b'closest(".search")', response.data)
 
     def test_search_suggestions_returns_last_three_played_game_previews(self):
         with site.app.app_context():
