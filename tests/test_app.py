@@ -79,6 +79,31 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Sign in", response.data)
 
+    def test_default_brand_is_gexora_with_updated_logo(self):
+        response = self.client.get("/")
+        logo_path = os.path.join("static", "gexora-logo.png")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Gexora", response.data)
+        self.assertIn(b"/static/gexora-logo.png", response.data)
+        self.assertTrue(os.path.exists(logo_path))
+        with open(logo_path, "rb") as logo_file:
+            self.assertEqual(logo_file.read(8), b"\x89PNG\r\n\x1a\n")
+
+    def test_init_db_migrates_old_default_site_name_to_gexora(self):
+        with site.app.app_context():
+            db = site.get_db()
+            db.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                ("site_name", "adamcoolsprojet.com"),
+            )
+            db.commit()
+
+            site.init_db()
+
+            self.assertEqual(site.get_setting("site_name"), "Gexora")
+
     def test_home_search_has_game_suggestions_ui(self):
         response = self.client.get("/")
 

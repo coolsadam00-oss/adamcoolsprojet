@@ -3,7 +3,7 @@
 This folder contains a Google Play-ready Android wrapper for the website at:
 
 ```text
-https://adamcoolsprojet.com/
+https://www.gexora.onrender.com/
 ```
 
 It uses a native Android WebView with JavaScript, cookies, file uploads, downloads, back-button navigation, and a small offline screen.
@@ -21,7 +21,7 @@ Google Play currently requires new Android phone/tablet app submissions to targe
 Edit this line in `app/build.gradle` if your website URL changes:
 
 ```gradle
-buildConfigField "String", "BASE_URL", "\"https://adamcoolsprojet.com/\""
+buildConfigField "String", "BASE_URL", "\"https://www.gexora.onrender.com/\""
 ```
 
 ## Build a Debug App
@@ -83,8 +83,8 @@ app/build/outputs/bundle/release/app-release.aab
 
 - App name: Adam Games
 - Package name: `com.adamcoolsprojet.games`
-- Privacy policy URL: `https://adamcoolsprojet.com/privacy`
-- Terms/rules URL: `https://adamcoolsprojet.com/terms`
+- Privacy policy URL: `https://www.gexora.onrender.com/privacy`
+- Terms/rules URL: `https://www.gexora.onrender.com/terms`
 - Target SDK: 35
 - Content rating: choose based on the games you allow users to upload
 - Data safety: declare account info and user-generated content if the public site allows uploads, comments, ratings, or logins

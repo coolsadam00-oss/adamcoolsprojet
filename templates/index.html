@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>{{ site_name }} — Games</title>
-  <link rel="icon" href="/static/site-icon.svg" type="image/svg+xml">
+  <link rel="icon" href="{{ site_logo }}" type="image/png">
   <link rel="stylesheet" href="/static/style.css">
   {% if ui_accent %}<style>:root{--accent:{{ ui_accent }};}</style>{% endif %}
 </head>
 <body>
   <nav class="topbar">
-    <a class="brand brand-lockup" href="/"><img src="/static/site-icon.svg" alt=""> <span>{{ site_name }}</span></a>
+    <a class="brand brand-lockup" href="/"><img src="{{ site_logo }}" alt=""> <span>{{ site_name }}</span></a>
     <div class="search">
       <form method="get" action="/">
         <input id="searchInput" name="q" placeholder="Search games or players..." value="{{ visible_q|e }}" autocomplete="off" />

@@ -5,8 +5,8 @@
   --card:#0f0f12;
   --text:#e8eef6;
   --muted:#9aa3b2;
-  --accent:#1e88e5;
-  --accent-soft:rgba(30,136,229,0.12);
+  --accent:#a855f7;
+  --accent-soft:rgba(168,85,247,0.14);
   --border:#111418;
   --success:#2e7d32;
   --danger:#e53935;
@@ -17,8 +17,8 @@ html[data-theme="light"]{
   --card:#f8fafc;
   --text:#0f172a;
   --muted:#64748b;
-  --accent:#1d4ed8;
-  --accent-soft:rgba(29,78,216,0.12);
+  --accent:#8b5cf6;
+  --accent-soft:rgba(139,92,246,0.14);
   --border:#d1d5db;
   --success:#166534;
   --danger:#b91c1c;
@@ -31,7 +31,7 @@ a{color:inherit}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 20px;background:color-mix(in srgb,var(--surface) 92%,var(--accent) 8%);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
 .brand{font-weight:800;font-size:18px;color:var(--text);text-decoration:none}
 .brand-lockup{display:inline-flex;align-items:center;gap:10px;min-width:0}
-.brand-lockup img{width:34px;height:34px;border-radius:10px;box-shadow:0 8px 24px rgba(30,136,229,0.22)}
+.brand-lockup img{width:34px;height:34px;border-radius:10px;box-shadow:0 8px 24px rgba(168,85,247,0.28)}
 .brand-lockup span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .topbar .search{flex:1;margin:0 18px}
 .topbar .search form{display:flex;gap:8px}
@@ -61,7 +61,7 @@ a{color:inherit}
 .profile-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;font-size:14px}
 
 /* Hero */
-.hero{padding:36px 20px;text-align:center;background:linear-gradient(90deg, rgba(30,136,229,0.08), transparent)}
+.hero{padding:36px 20px;text-align:center;background:linear-gradient(90deg, rgba(168,85,247,0.10), transparent)}
 .hero h1{margin:0;font-size:28px}
 .hero p{margin:8px 0 0;color:var(--muted)}
 

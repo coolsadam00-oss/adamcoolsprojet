@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: adamcoolsprojet
+    name: gexora
     env: python
     plan: starter
     region: oregon
@@ -9,7 +9,11 @@ services:
     envVars:
       - key: RENDER_DATA_DIR
         value: /var/data
+      - key: SITE_NAME
+        value: Gexora
+      - key: SITE_URL
+        value: https://www.gexora.onrender.com
     disk:
-      name: adamcoolsprojet-data
+      name: gexora-data
       mountPath: /var/data
       sizeGB: 1

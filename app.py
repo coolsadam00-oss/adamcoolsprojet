@@ -62,7 +62,8 @@ app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-key-for-local-change-me")
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200MB uploads
-app.config["SITE_NAME"] = os.environ.get("SITE_NAME", "adamcoolsprojet.com")
+app.config["SITE_NAME"] = os.environ.get("SITE_NAME", "Gexora")
+app.config["SITE_URL"] = os.environ.get("SITE_URL", "https://www.gexora.onrender.com")
 app.config["PREFERRED_URL_SCHEME"] = os.environ.get("PREFERRED_URL_SCHEME", "https")
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -73,7 +74,7 @@ ADMIN_EMAIL = "coolsadam00@gmail.com"
 ADMIN_LOGIN = "ADMINADAM2155"
 PREMADE_ACCOUNT_PASSWORD = "Brosky2155"
 DEFAULT_AVATARS = (
-    ("Blue Bolt", "/static/site-icon.svg"),
+    ("Gexora", "/static/gexora-logo.png"),
 )
 THUMBNAIL_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
@@ -82,6 +83,7 @@ THUMBNAIL_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 def inject_site_name():
     return {
         "site_name": get_setting("site_name", app.config.get("SITE_NAME", "My Games")),
+        "site_logo": "/static/gexora-logo.png",
         "ui_accent": get_setting("accent_color", ""),
         "current_user": current_user(),
         "is_admin": is_admin(),
@@ -219,6 +221,7 @@ def init_db():
         )
         """
     )
+    migrate_default_brand_settings(db)
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS admin_activity (
@@ -347,6 +350,14 @@ def init_db():
     seed_default_avatars(db)
     seed_premade_account(db)
     db.commit()
+
+
+def migrate_default_brand_settings(db):
+    db.execute(
+        "UPDATE settings SET value = ? "
+        "WHERE key = 'site_name' AND value IN (?, ?)",
+        ("Gexora", "adamcoolsprojet.com", "Game Verse"),
+    )
 
 
 def rebuild_users_if_email_is_required(db):
@@ -1101,7 +1112,7 @@ def search_suggestions():
                 "title": row["title"],
                 "subtitle": row["description"] or "",
                 "url": f"/project/{row['id']}",
-                "image": f"/project_files/{row['id']}/{row['thumbnail']}" if row["thumbnail"] else "/static/site-icon.svg",
+                "image": f"/project_files/{row['id']}/{row['thumbnail']}" if row["thumbnail"] else "/static/gexora-logo.png",
             }
             for row in project_rows
             if row["title"]
@@ -1119,7 +1130,7 @@ def search_suggestions():
                     "title": row["name"] or row["username"] or (row["email"] or "").split("@")[0],
                     "subtitle": "Player",
                     "url": f"/?q={urllib.parse.quote_plus(row['name'] or row['username'] or row['email'] or '')}",
-                    "image": row["picture"] or "/static/site-icon.svg",
+                    "image": row["picture"] or "/static/gexora-logo.png",
                 }
                 for row in user_rows
             )
@@ -1133,7 +1144,7 @@ def search_suggestions():
                 "title": row["title"],
                 "subtitle": row["description"] or "",
                 "url": f"/project/{row['id']}",
-                "image": f"/project_files/{row['id']}/{row['thumbnail']}" if row["thumbnail"] else "/static/site-icon.svg",
+                "image": f"/project_files/{row['id']}/{row['thumbnail']}" if row["thumbnail"] else "/static/gexora-logo.png",
             }
             for row in rows
             if row["title"]
