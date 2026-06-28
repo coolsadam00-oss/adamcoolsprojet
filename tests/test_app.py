@@ -1590,6 +1590,53 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/admin", response.headers["Location"])
 
+    def test_website_data_import_moves_existing_projects_instead_of_copying_backup(self):
+        self.login()
+        with site.app.app_context():
+            db = site.get_db()
+            db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Original Game", "Original", "backup", "1", "now"),
+            )
+            db.commit()
+        os.makedirs(os.path.join(site.PROJECTS_DIR, "1"), exist_ok=True)
+        with open(os.path.join(site.PROJECTS_DIR, "1", "index.html"), "w", encoding="utf-8") as f:
+            f.write("<h1>Original</h1>")
+
+        temp_db_fd, temp_db_path = tempfile.mkstemp(suffix=".db")
+        os.close(temp_db_fd)
+        try:
+            conn = sqlite3.connect(temp_db_path)
+            conn.execute("CREATE TABLE projects (id INTEGER PRIMARY KEY AUTOINCREMENT)")
+            conn.commit()
+            conn.close()
+            export_zip = io.BytesIO()
+            with zipfile.ZipFile(export_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.write(temp_db_path, "projects.db")
+            export_zip.seek(0)
+
+            real_copytree = shutil.copytree
+
+            def fail_on_project_backup_copy(src, dst, *args, **kwargs):
+                if os.path.basename(dst) == "projects-import-backup":
+                    raise AssertionError("Import should move the project backup, not copy it.")
+                return real_copytree(src, dst, *args, **kwargs)
+
+            with mock.patch.object(shutil, "copytree", side_effect=fail_on_project_backup_copy):
+                response = self.client.post(
+                    "/admin/import-website-data",
+                    data={"backup": (export_zip, "backup.zip")},
+                    content_type="multipart/form-data",
+                )
+        finally:
+            os.unlink(temp_db_path)
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            count = site.get_db().execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+        self.assertEqual(count, 0)
+
     def test_admin_import_restores_full_exported_site_data(self):
         self.login()
         with site.app.app_context():

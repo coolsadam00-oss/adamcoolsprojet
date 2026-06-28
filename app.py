@@ -2273,12 +2273,10 @@ def import_website_data():
         if os.path.isdir(project_backup):
             shutil.rmtree(project_backup)
         if os.path.isdir(PROJECTS_DIR):
-            shutil.copytree(PROJECTS_DIR, project_backup)
+            os.replace(PROJECTS_DIR, project_backup)
+        os.makedirs(PROJECTS_DIR, exist_ok=True)
 
         shutil.copy2(imported_db_path, DB_PATH)
-        if os.path.isdir(PROJECTS_DIR):
-            shutil.rmtree(PROJECTS_DIR)
-        os.makedirs(PROJECTS_DIR, exist_ok=True)
         backups_import = os.path.join(temp_root, "backups")
         if os.path.isdir(backups_import):
             if os.path.isdir(BACKUPS_DIR):
@@ -2301,7 +2299,7 @@ def import_website_data():
         if project_backup and os.path.isdir(project_backup):
             if os.path.isdir(PROJECTS_DIR):
                 shutil.rmtree(PROJECTS_DIR)
-            shutil.copytree(project_backup, PROJECTS_DIR)
+            os.replace(project_backup, PROJECTS_DIR)
         if db_backup and os.path.exists(db_backup):
             shutil.copy2(db_backup, DB_PATH)
     finally:
