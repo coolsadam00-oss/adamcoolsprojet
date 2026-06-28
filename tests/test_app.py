@@ -1087,6 +1087,7 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertEqual(row["platform_support"], "mobile_pc")
         self.assertEqual(row["source_zip"], "source.zip")
         self.assertTrue(row["thumbnail"].endswith("thumbnail.png"))
+        self.assertFalse(os.listdir(site.BACKUPS_DIR))
 
     def test_upload_requires_platform_support_choice_and_confirmation(self):
         self.login()

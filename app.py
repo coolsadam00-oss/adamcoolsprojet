@@ -467,7 +467,12 @@ def close_db(exc):
 
 @app.after_request
 def backup_after_successful_change(response):
-    skip_endpoints = {"project_heartbeat"}
+    skip_endpoints = {
+        "project_heartbeat",
+        "upload",
+        "replace_project_source",
+        "import_website_data",
+    }
     if (
         request.method == "POST"
         and response.status_code < 400
