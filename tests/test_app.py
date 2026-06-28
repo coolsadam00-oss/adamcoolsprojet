@@ -1,3 +1,4 @@
+import datetime
 import io
 import os
 import shutil
@@ -611,6 +612,25 @@ class SiteAuthAdminTests(unittest.TestCase):
             ).fetchone()
         self.assertEqual(user["name"], "Cool Player")
 
+    def test_signed_in_user_can_update_public_bio(self):
+        user_id = self.login("player@example.com", "Player")
+
+        response = self.client.post(
+            "/account/profile",
+            data={
+                "username": "Cool Player",
+                "bio": "I build neon platformers.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            user = site.get_db().execute(
+                "SELECT bio FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+        self.assertEqual(user["bio"], "I build neon platformers.")
+
     def test_signed_in_user_can_choose_offered_profile_picture(self):
         user_id = self.login("player@example.com", "Player")
         with site.app.app_context():
@@ -657,6 +677,95 @@ class SiteAuthAdminTests(unittest.TestCase):
                 (min(player_id, friend["id"]), max(player_id, friend["id"])),
             ).fetchone()
         self.assertEqual(friendship["status"], "accepted")
+
+    def test_account_shows_friend_online_status_and_current_game(self):
+        player_id = self.login("player@example.com", "Player")
+        with site.app.app_context():
+            db = site.get_db()
+            friend = site.upsert_user("friend@example.com", "Friend")
+            site.create_friend_request(player_id, friend["id"])
+            site.accept_friend_request(friend["id"], player_id)
+            db.execute(
+                "INSERT INTO projects (id, title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (44, "Neon Racer", "Fast", "", "44", "now"),
+            )
+            db.execute(
+                "INSERT INTO player_activity "
+                "(user_id, visitor_id, project_id, action, details, ip_address, user_agent, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    friend["id"],
+                    None,
+                    44,
+                    "active_play",
+                    "Playing Neon Racer",
+                    "127.0.0.1",
+                    "test",
+                    datetime.datetime.now(datetime.UTC).isoformat(),
+                ),
+            )
+            db.commit()
+
+        response = self.client.get("/account")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Online", response.data)
+        self.assertIn(b"Playing Neon Racer", response.data)
+        self.assertIn(b"/players/", response.data)
+
+    def test_public_profile_shows_bio_follow_button_and_games(self):
+        player_id = self.login("player@example.com", "Player")
+        with site.app.app_context():
+            db = site.get_db()
+            target = site.upsert_user("builder@example.com", "Builder")
+            db.execute(
+                "UPDATE users SET bio = ? WHERE id = ?",
+                ("I make tiny games.", target["id"]),
+            )
+            db.execute(
+                "INSERT INTO projects (id, title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (55, "Builder Game", "Fun", "", "55", "now"),
+            )
+            db.execute(
+                "INSERT INTO favorites (user_id, project_id, created_at) VALUES (?, ?, ?)",
+                (target["id"], 55, "now"),
+            )
+            db.commit()
+
+        response = self.client.get(f"/players/{target['id']}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Builder", response.data)
+        self.assertIn(b"I make tiny games.", response.data)
+        self.assertIn(b"Follow", response.data)
+        self.assertIn(b"Add friend", response.data)
+        self.assertIn(b"Builder Game", response.data)
+        self.assertNotIn(b"builder@example.com", response.data)
+
+    def test_signed_in_user_can_follow_and_unfollow_player(self):
+        follower_id = self.login("player@example.com", "Player")
+        with site.app.app_context():
+            target = site.upsert_user("creator@example.com", "Creator")
+
+        follow_response = self.client.post(f"/players/{target['id']}/follow")
+        with site.app.app_context():
+            follow = site.get_db().execute(
+                "SELECT * FROM follows WHERE follower_id = ? AND followed_id = ?",
+                (follower_id, target["id"]),
+            ).fetchone()
+        unfollow_response = self.client.post(f"/players/{target['id']}/follow")
+        with site.app.app_context():
+            count = site.get_db().execute(
+                "SELECT COUNT(*) FROM follows WHERE follower_id = ? AND followed_id = ?",
+                (follower_id, target["id"]),
+            ).fetchone()[0]
+
+        self.assertEqual(follow_response.status_code, 302)
+        self.assertIsNotNone(follow)
+        self.assertEqual(unfollow_response.status_code, 302)
+        self.assertEqual(count, 0)
 
     def test_private_message_requires_friendship(self):
         self.login("player@example.com", "Player")

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{ player.name or player.username or 'Player' }} - {{ site_name }}</title>
+  <link rel="icon" href="{{ site_logo }}" type="image/png">
+  <link rel="stylesheet" href="/static/style.css">
+  {% if ui_accent %}<style>:root{--accent:{{ ui_accent }};}</style>{% endif %}
+</head>
+<body>
+  <nav class="topbar">
+    <a class="brand brand-lockup" href="/"><img src="{{ site_logo }}" alt=""> <span>{{ site_name }}</span></a>
+    <div class="actions">
+      <a class="btn" href="/">Back</a>
+      {% if current_user %}
+        <a class="btn secondary" href="/account">Account</a>
+      {% else %}
+        <a class="btn secondary" href="/login?next=/players/{{ player.id }}">Sign in</a>
+      {% endif %}
+    </div>
+  </nav>
+
+  <main class="account-main">
+    <section class="account-panel">
+      <div class="profile-preview">
+        {% if player.picture %}
+          <img class="profile-avatar-img large" src="{{ player.picture }}" alt="">
+        {% else %}
+          <span class="profile-avatar large">{{ (player.name or player.username or '?')[:1]|upper }}</span>
+        {% endif %}
+        <div>
+          <h1>{{ player.name or player.username or 'Player' }}</h1>
+          <span>
+            {% if player.is_online %}Online{% else %}Offline{% endif %}
+            {% if player.current_game_title %}
+              - Playing {{ player.current_game_title }}
+              {% if player.current_game_id %}
+                <a href="/project/{{ player.current_game_id }}">Open</a>
+              {% else %}
+              {% endif %}
+            {% endif %}
+          </span>
+        </div>
+      </div>
+
+      {% if player.bio %}
+        <p class="profile-bio">{{ player.bio }}</p>
+      {% else %}
+        <p class="muted">No bio yet.</p>
+      {% endif %}
+
+      <div class="profile-actions">
+        <span class="tag">{{ follower_count }} follower{% if follower_count != 1 %}s{% endif %}</span>
+        <span class="tag">{{ following_count }} following</span>
+        {% if current_user and current_user.id != player.id %}
+          <form method="post" action="/players/{{ player.id }}/follow" class="inline-form">
+            <button type="submit">{% if is_following %}Unfollow{% else %}Follow{% endif %}</button>
+          </form>
+          {% if is_friend %}
+            <span class="tag">Friend</span>
+          {% else %}
+            <form method="post" action="/friends/{{ player.id }}/request" class="inline-form">
+              <button type="submit">Add friend</button>
+            </form>
+          {% endif %}
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="profile-form">
+      <h2>Favorite games</h2>
+      <div class="admin-list">
+        {% for project in favorite_projects %}
+          <article class="admin-row">
+            <div>
+              <strong>{{ project.title }}</strong>
+              <p class="muted">{{ project.description }}</p>
+            </div>
+            <a class="btn small" href="/project/{{ project.id }}">Open</a>
+          </article>
+        {% else %}
+          <p class="empty">No favorite games yet.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+  <script src="/static/theme.js"></script>
+</body>
+</html>

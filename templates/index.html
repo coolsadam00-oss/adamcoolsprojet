@@ -57,7 +57,7 @@
                 <span class="profile-avatar">{{ (u.name or u.username or u.email or '?')[:1]|upper }}</span>
               {% endif %}
               <span>
-                <strong>{{ u.name or u.username or (u.email.split('@')[0] if u.email else 'player') }}</strong>
+                <strong><a href="/players/{{ u.id }}">{{ u.name or u.username or (u.email.split('@')[0] if u.email else 'player') }}</a></strong>
                 {% if is_admin %}
                   <small>{{ u.email or 'No safety email' }}</small>
                 {% else %}

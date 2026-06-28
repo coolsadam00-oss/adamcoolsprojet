@@ -175,7 +175,10 @@ button.small{padding:6px 10px;font-size:13px}
 .profile-preview div{display:grid;gap:2px}
 .profile-preview span{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
 .profile-form label{display:block;margin:14px 0;color:var(--muted);font-size:13px}
-.profile-form input{width:100%;margin-top:6px;padding:11px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
+.profile-form input,.profile-form textarea{width:100%;margin-top:6px;padding:11px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:inherit}
+.profile-form textarea{min-height:92px;resize:vertical;font-family:inherit}
+.profile-bio{line-height:1.55;overflow-wrap:anywhere}
+.profile-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px}
 .avatar-picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:16px 0;padding:0;border:0}
 .avatar-picker legend{grid-column:1/-1;color:var(--muted);font-size:13px;margin-bottom:2px}
 .avatar-choice{display:flex!important;align-items:center;gap:10px;margin:0!important;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)!important;cursor:pointer}

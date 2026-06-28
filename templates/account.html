@@ -46,6 +46,7 @@
           </div>
         </div>
         <label>Username<input name="username" maxlength="32" value="{{ display_name }}" required></label>
+        <label>Bio<textarea name="bio" maxlength="300" placeholder="Tell players what you build or like to play...">{{ current_user.bio or '' }}</textarea></label>
         <fieldset class="avatar-picker">
           <legend>Profile picture</legend>
           <label class="avatar-choice">
@@ -85,8 +86,17 @@
           {% for friend in friends %}
             <article class="admin-row">
               <div>
-                <strong>{{ friend.name or friend.username or friend.email }}</strong>
-                <p class="muted">Friend</p>
+                <strong><a href="/players/{{ friend.id }}">{{ friend.name or friend.username or friend.email }}</a></strong>
+                <p class="muted">
+                  {% if friend.is_online %}Online{% else %}Offline{% endif %}
+                  {% if friend.current_game_title %}
+                    - Playing {{ friend.current_game_title }}
+                    {% if friend.current_game_id %}
+                      <a href="/project/{{ friend.current_game_id }}">Open</a>
+                    {% else %}
+                    {% endif %}
+                  {% endif %}
+                </p>
               </div>
               <form method="post" action="/messages/{{ friend.id }}" class="friend-message-form">
                 <input name="body" maxlength="1000" placeholder="Send a safe message..." required>

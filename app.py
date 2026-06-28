@@ -179,6 +179,8 @@ def init_db():
         db.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0")
     if "verification_token" not in user_columns:
         db.execute("ALTER TABLE users ADD COLUMN verification_token TEXT")
+    if "bio" not in user_columns:
+        db.execute("ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''")
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS ratings (
@@ -302,6 +304,17 @@ def init_db():
     )
     db.execute(
         """
+        CREATE TABLE IF NOT EXISTS follows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            follower_id INTEGER NOT NULL,
+            followed_id INTEGER NOT NULL,
+            created_at TEXT,
+            UNIQUE(follower_id, followed_id)
+        )
+        """
+    )
+    db.execute(
+        """
         CREATE TABLE IF NOT EXISTS security_alerts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -378,7 +391,8 @@ def rebuild_users_if_email_is_required(db):
             last_login TEXT,
             password_hash TEXT,
             email_verified INTEGER NOT NULL DEFAULT 0,
-            verification_token TEXT
+            verification_token TEXT,
+            bio TEXT NOT NULL DEFAULT ''
         )
         """
     )
@@ -389,12 +403,14 @@ def rebuild_users_if_email_is_required(db):
         "username" if "username" in old_columns
         else "lower(substr(email, 1, instr(email, '@') - 1)) || id"
     )
+    bio_expr = "bio" if "bio" in old_columns else "''"
     db.execute(
         "INSERT INTO users "
         "(id, email, username, name, picture, is_admin, created_at, last_login, "
-        "password_hash, email_verified, verification_token) "
+        "password_hash, email_verified, verification_token, bio) "
         f"SELECT id, email, {username_expr}, name, picture, is_admin, created_at, "
-        "last_login, password_hash, email_verified, verification_token FROM users_old"
+        "last_login, password_hash, email_verified, verification_token, "
+        f"{bio_expr} FROM users_old"
     )
     db.execute("DROP TABLE users_old")
 
@@ -597,6 +613,76 @@ def are_friends(user_id, friend_id):
         (left_id, right_id),
     ).fetchone()
     return bool(row and row["status"] == "accepted")
+
+
+def parse_utc(value):
+    if not value:
+        return None
+    try:
+        parsed = datetime.datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.UTC)
+    return parsed.astimezone(datetime.UTC)
+
+
+def is_recent_activity(value, minutes=2):
+    parsed = parse_utc(value)
+    if not parsed:
+        return False
+    return datetime.datetime.now(datetime.UTC) - parsed <= datetime.timedelta(minutes=minutes)
+
+
+def enrich_player_presence(players):
+    players = [dict(player) for player in players]
+    if not players:
+        return players
+    ids = [player["id"] for player in players]
+    placeholders = ",".join("?" for _ in ids)
+    latest_any = {
+        row["user_id"]: row
+        for row in get_db().execute(
+            f"""
+            SELECT pa.*
+            FROM player_activity pa
+            JOIN (
+                SELECT user_id, MAX(id) AS id
+                FROM player_activity
+                WHERE user_id IN ({placeholders})
+                GROUP BY user_id
+            ) latest ON latest.id = pa.id
+            """,
+            ids,
+        ).fetchall()
+    }
+    latest_games = {
+        row["user_id"]: row
+        for row in get_db().execute(
+            f"""
+            SELECT pa.*, p.title AS project_title
+            FROM player_activity pa
+            LEFT JOIN projects p ON p.id = pa.project_id
+            JOIN (
+                SELECT user_id, MAX(id) AS id
+                FROM player_activity
+                WHERE action = 'active_play' AND user_id IN ({placeholders})
+                GROUP BY user_id
+            ) latest ON latest.id = pa.id
+            """,
+            ids,
+        ).fetchall()
+    }
+    for player in players:
+        latest = latest_any.get(player["id"])
+        latest_game = latest_games.get(player["id"])
+        player["is_online"] = bool(latest and is_recent_activity(latest["created_at"]))
+        player["current_game_title"] = ""
+        player["current_game_id"] = None
+        if latest_game and is_recent_activity(latest_game["created_at"]):
+            player["current_game_title"] = latest_game["project_title"] or latest_game["details"]
+            player["current_game_id"] = latest_game["project_id"]
+    return players
 
 
 BAD_WORDS = {
@@ -1129,7 +1215,7 @@ def search_suggestions():
                     "type": "user",
                     "title": row["name"] or row["username"] or (row["email"] or "").split("@")[0],
                     "subtitle": "Player",
-                    "url": f"/?q={urllib.parse.quote_plus(row['name'] or row['username'] or row['email'] or '')}",
+                    "url": f"/players/{row['id']}",
                     "image": row["picture"] or "/static/gexora-logo.png",
                 }
                 for row in user_rows
@@ -1363,6 +1449,7 @@ def account():
         "ORDER BY u.name, u.username",
         (user["id"], user["id"], user["id"]),
     ).fetchall()
+    friends = enrich_player_presence(friends)
     favorite_projects = db.execute(
         "SELECT p.* FROM favorites f JOIN projects p ON p.id = f.project_id "
         "WHERE f.user_id = ? ORDER BY f.id DESC",
@@ -1394,6 +1481,7 @@ def account():
 @login_required
 def update_profile():
     username = " ".join(request.form.get("username", "").split())
+    bio = " ".join(request.form.get("bio", "").split())[:300]
     if len(username) < 2 or len(username) > 32:
         flash("Username must be 2 to 32 characters.")
         return redirect(url_for("account"))
@@ -1415,13 +1503,80 @@ def update_profile():
                 return redirect(url_for("account"))
             picture = avatar["image_url"]
     get_db().execute(
-        "UPDATE users SET name = ?, picture = ? WHERE id = ?",
-        (username, picture, current_user()["id"]),
+        "UPDATE users SET name = ?, picture = ?, bio = ? WHERE id = ?",
+        (username, picture, bio, current_user()["id"]),
     )
     get_db().commit()
     g.current_user = None
     flash("Profile saved.")
     return redirect(url_for("account"))
+
+
+@app.route("/players/<int:user_id>")
+def player_profile(user_id):
+    db = get_db()
+    player = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not player:
+        abort(404)
+    presence = enrich_player_presence([player])[0]
+    favorite_projects = db.execute(
+        "SELECT p.* FROM favorites f JOIN projects p ON p.id = f.project_id "
+        "WHERE f.user_id = ? ORDER BY f.id DESC LIMIT 8",
+        (user_id,),
+    ).fetchall()
+    follower_count = db.execute(
+        "SELECT COUNT(*) FROM follows WHERE followed_id = ?",
+        (user_id,),
+    ).fetchone()[0]
+    following_count = db.execute(
+        "SELECT COUNT(*) FROM follows WHERE follower_id = ?",
+        (user_id,),
+    ).fetchone()[0]
+    is_following = False
+    is_friend = False
+    if current_user():
+        is_following = bool(
+            db.execute(
+                "SELECT id FROM follows WHERE follower_id = ? AND followed_id = ?",
+                (current_user()["id"], user_id),
+            ).fetchone()
+        )
+        is_friend = are_friends(current_user()["id"], user_id)
+    return render_template(
+        "player.html",
+        player=presence,
+        favorite_projects=favorite_projects,
+        follower_count=follower_count,
+        following_count=following_count,
+        is_following=is_following,
+        is_friend=is_friend,
+    )
+
+
+@app.route("/players/<int:user_id>/follow", methods=["POST"])
+@login_required
+def follow_player(user_id):
+    if user_id == current_user()["id"]:
+        flash("You cannot follow yourself.")
+        return redirect(url_for("player_profile", user_id=user_id))
+    target = get_db().execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not target:
+        abort(404)
+    existing = get_db().execute(
+        "SELECT id FROM follows WHERE follower_id = ? AND followed_id = ?",
+        (current_user()["id"], user_id),
+    ).fetchone()
+    if existing:
+        get_db().execute("DELETE FROM follows WHERE id = ?", (existing["id"],))
+        flash(f"Unfollowed {user_label(target)}.")
+    else:
+        get_db().execute(
+            "INSERT INTO follows (follower_id, followed_id, created_at) VALUES (?, ?, ?)",
+            (current_user()["id"], user_id, datetime.datetime.now(datetime.UTC).isoformat()),
+        )
+        flash(f"Following {user_label(target)}.")
+    get_db().commit()
+    return redirect(request.referrer or url_for("player_profile", user_id=user_id))
 
 
 @app.route("/account/delete", methods=["POST"])
@@ -2050,6 +2205,7 @@ def export_website_data():
             "friendships",
             "messages",
             "favorites",
+            "follows",
             "comments",
             "ratings",
             "security_alerts",
