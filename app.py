@@ -63,7 +63,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-key-for-local-change-me")
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200MB uploads
 app.config["SITE_NAME"] = os.environ.get("SITE_NAME", "Gexora")
-app.config["SITE_URL"] = os.environ.get("SITE_URL", "https://www.gexora.onrender.com")
+app.config["SITE_URL"] = os.environ.get("SITE_URL", "https://gexora.onrender.com")
 app.config["PREFERRED_URL_SCHEME"] = os.environ.get("PREFERRED_URL_SCHEME", "https")
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"

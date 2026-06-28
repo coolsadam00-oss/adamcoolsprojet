@@ -12,7 +12,7 @@ services:
       - key: SITE_NAME
         value: Gexora
       - key: SITE_URL
-        value: https://www.gexora.onrender.com
+        value: https://gexora.onrender.com
     disk:
       name: gexora-data
       mountPath: /var/data
