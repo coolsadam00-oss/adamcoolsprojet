@@ -16,6 +16,7 @@
         <h1>Play as guest, sign in when you want an account.</h1>
         <p>Search and play games without logging in. Create an account with a username. Email is optional and only used as a safety address.</p>
         <a class="guest-link" href="/">Continue as guest</a>
+        <a class="guest-link" href="{{ support_help_url }}">Need help?</a>
       </div>
       <div class="auth-panel">
       {% with messages = get_flashed_messages() %}
@@ -43,7 +44,7 @@
           <label>Safety email (optional)<input name="email" type="email" autocomplete="email"></label>
           <label>Password<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
           <label>Confirm password<input name="confirm_password" type="password" autocomplete="new-password" minlength="8" required></label>
-          <label class="check-row"><input name="agree_terms" type="checkbox" required> I agree to the <a href="/terms">Website Rules</a> and <a href="/privacy">Privacy Policy</a>.</label>
+          <label class="check-row"><input name="agree_terms" type="checkbox" required> I agree to the <a href="/terms">Website Rules</a> and <a href="/privacy">Privacy Policy</a>. Need help? <a href="{{ support_help_url }}">Contact support</a>.</label>
           <button type="submit">Create account</button>
         </form>
         <form method="post" action="/resend-verification" class="auth-form auth-form-soft">

@@ -36,6 +36,7 @@
       {% else %}
         <a class="btn secondary" href="/login">Sign in</a>
       {% endif %}
+      <a class="btn secondary" href="{{ support_help_url }}">Help</a>
       <button id="themeToggle" class="theme-toggle" type="button">Toggle Theme</button>
     </div>
   </nav>
@@ -113,7 +114,7 @@
 
   <footer>
     <div class="footer-inner">{{ site_name }} — simple game gallery • Upload responsibly</div>
-    <div class="footer-inner"><a href="/terms">Website Rules</a> - <a href="/privacy">Privacy Policy</a></div>
+    <div class="footer-inner"><a href="/terms">Website Rules</a> - <a href="/privacy">Privacy Policy</a> - <a href="{{ support_help_url }}">Help</a></div>
   </footer>
   <script>
     (function () {

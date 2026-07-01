@@ -85,6 +85,9 @@ def inject_site_name():
         "site_name": get_setting("site_name", app.config.get("SITE_NAME", "My Games")),
         "site_logo": "/static/gexora-logo.png",
         "ui_accent": get_setting("accent_color", ""),
+        "support_help_url": app.config.get(
+            "SUPPORT_HELP_URL", "https://adamstudio.onrender.com/help"
+        ),
         "current_user": current_user(),
         "is_admin": is_admin(),
         "display_name": display_name(current_user()),
