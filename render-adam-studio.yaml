@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: adam-studio
+    env: python
+    plan: starter
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn adam_studio_app:app --log-file -
