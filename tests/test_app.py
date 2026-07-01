@@ -290,6 +290,92 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertIn(b"Monitor Game", admin_page.data)
         self.assertIn(b"active play", admin_page.data)
 
+    def test_admin_panel_shows_game_control_buttons_for_active_players(self):
+        player_id = self.login("player@example.com", "Player")
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Control Game", "", "", "1", "now"),
+            )
+            project_id = cur.lastrowid
+            db.execute(
+                "INSERT INTO player_activity "
+                "(user_id, visitor_id, project_id, action, details, ip_address, user_agent, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    player_id,
+                    "visitor-1",
+                    project_id,
+                    "active_play",
+                    "Playing Control Game",
+                    "127.0.0.1",
+                    "Test Browser",
+                    datetime.datetime.now(datetime.UTC).isoformat(),
+                ),
+            )
+            db.commit()
+
+        self.login()
+        response = self.client.get("/admin")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(f"/admin/users/{player_id}/game-control".encode(), response.data)
+        self.assertIn(b'value="kick"', response.data)
+        self.assertIn(b'value="jumpscare"', response.data)
+        self.assertIn(b'value="freeze"', response.data)
+        self.assertIn(b'value="fly"', response.data)
+
+    def test_admin_can_queue_game_control_for_player(self):
+        self.login()
+        with site.app.app_context():
+            user = site.upsert_user("player@example.com", "Player")
+
+        response = self.client.post(
+            f"/admin/users/{user['id']}/game-control",
+            data={"action": "freeze"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with site.app.app_context():
+            control = site.get_db().execute(
+                "SELECT action, consumed_at FROM game_controls WHERE user_id = ?",
+                (user["id"],),
+            ).fetchone()
+        self.assertEqual(control["action"], "freeze")
+        self.assertIsNone(control["consumed_at"])
+
+    def test_heartbeat_returns_and_consumes_pending_game_control(self):
+        player_id = self.login("player@example.com", "Player")
+        with site.app.app_context():
+            db = site.get_db()
+            cur = db.execute(
+                "INSERT INTO projects (title, description, tags, folder, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("Controlled Game", "", "", "1", "now"),
+            )
+            project_id = cur.lastrowid
+            db.execute(
+                "INSERT INTO game_controls "
+                "(user_id, action, created_by, created_at) VALUES (?, ?, ?, ?)",
+                (player_id, "kick", None, "now"),
+            )
+            db.commit()
+
+        response = self.client.post(f"/project/{project_id}/heartbeat")
+        second_response = self.client.post(f"/project/{project_id}/heartbeat")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["control"]["action"], "kick")
+        self.assertEqual(second_response.status_code, 204)
+        with site.app.app_context():
+            control = site.get_db().execute(
+                "SELECT consumed_at FROM game_controls WHERE user_id = ?",
+                (player_id,),
+            ).fetchone()
+        self.assertIsNotNone(control["consumed_at"])
+
     def test_seed_admin_email_is_admin(self):
         with site.app.app_context():
             user = site.upsert_user(email=ADMIN_EMAIL, name="Adam")

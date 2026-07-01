@@ -134,10 +134,54 @@
           method: "POST",
           credentials: "same-origin",
           keepalive: true
+        }).then(function (response) {
+          if (response.status === 204) return null;
+          var contentType = response.headers.get("content-type") || "";
+          if (contentType.indexOf("application/json") === -1) return null;
+          return response.json();
+        }).then(function (data) {
+          if (data && data.control) {
+            applyGameControl(data.control);
+          }
         }).catch(function () {});
       }
+      function controlOverlay(className, text, duration) {
+        var overlay = document.createElement("div");
+        overlay.className = className;
+        overlay.textContent = text;
+        document.body.appendChild(overlay);
+        window.setTimeout(function () {
+          overlay.remove();
+        }, duration || 1800);
+      }
+      function applyGameControl(control) {
+        var action = control.action;
+        if (action === "kick") {
+          controlOverlay("game-control-overlay game-control-kick", "Kicked from game", 900);
+          window.setTimeout(function () {
+            window.location.href = "/";
+          }, 700);
+          return;
+        }
+        if (action === "jumpscare") {
+          controlOverlay("game-control-overlay game-control-jumpscare", "BOO!", 1200);
+          return;
+        }
+        if (action === "freeze") {
+          controlOverlay("game-control-overlay game-control-freeze", "Frozen", 5000);
+          return;
+        }
+        if (action === "fly") {
+          var frame = document.getElementById("gameFrame");
+          if (!frame) return;
+          frame.classList.add("game-control-fly");
+          window.setTimeout(function () {
+            frame.classList.remove("game-control-fly");
+          }, 5000);
+        }
+      }
       sendHeartbeat();
-      setInterval(sendHeartbeat, 30000);
+      setInterval(sendHeartbeat, 10000);
       document.addEventListener("visibilitychange", sendHeartbeat);
     }());
     (function () {

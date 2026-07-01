@@ -328,6 +328,19 @@ def init_db():
         )
         """
     )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_controls (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            message TEXT,
+            created_by INTEGER,
+            created_at TEXT,
+            consumed_at TEXT
+        )
+        """
+    )
     columns = {
         row["name"] for row in db.execute("PRAGMA table_info(projects)").fetchall()
     }
@@ -469,6 +482,7 @@ def close_db(exc):
 def backup_after_successful_change(response):
     skip_endpoints = {
         "project_heartbeat",
+        "queue_game_control",
         "upload",
         "replace_project_source",
         "import_website_data",
@@ -818,6 +832,38 @@ def log_player_activity(action, project_id=None, details=""):
             datetime.datetime.now(datetime.UTC).isoformat(),
         ),
     )
+
+
+GAME_CONTROL_ACTIONS = {
+    "kick": "Kick from game",
+    "jumpscare": "Jumpscare",
+    "freeze": "Freeze game",
+    "fly": "Make player fly",
+}
+
+
+def consume_pending_game_control(user_id):
+    if not user_id:
+        return None
+    db = get_db()
+    control = db.execute(
+        "SELECT * FROM game_controls WHERE user_id = ? AND consumed_at IS NULL "
+        "ORDER BY id ASC LIMIT 1",
+        (user_id,),
+    ).fetchone()
+    if not control:
+        return None
+    consumed_at = datetime.datetime.now(datetime.UTC).isoformat()
+    db.execute(
+        "UPDATE game_controls SET consumed_at = ? WHERE id = ?",
+        (consumed_at, control["id"]),
+    )
+    return {
+        "id": control["id"],
+        "action": control["action"],
+        "label": GAME_CONTROL_ACTIONS.get(control["action"], control["action"]),
+        "message": control["message"] or "",
+    }
 
 
 def recent_player_activity(limit=40):
@@ -1805,7 +1851,10 @@ def project_heartbeat(pid):
         pid,
         f"Playing {project['title']}",
     )
+    control = consume_pending_game_control(current_user()["id"] if current_user() else None)
     db.commit()
+    if control:
+        return jsonify({"control": control})
     return ("", 204)
 
 
@@ -2219,6 +2268,7 @@ def export_website_data():
             "user_bans",
             "admin_activity",
             "player_activity",
+            "game_controls",
         ]:
             export_table_to_json(archive, db, table_name)
         add_folder_to_zip(archive, BACKUPS_DIR, "backups")
@@ -2336,6 +2386,41 @@ def delete_project(pid):
     )
     db.commit()
     flash("Game removed.")
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/users/<int:user_id>/game-control", methods=["POST"])
+@admin_required
+def queue_game_control(user_id):
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not user:
+        abort(404)
+    ensure_can_moderate_user(user)
+    action = request.form.get("action", "").strip()
+    if action not in GAME_CONTROL_ACTIONS:
+        flash("Choose a valid game control.")
+        return redirect(url_for("admin_panel"))
+    message = " ".join(request.form.get("message", "").split())[:200]
+    db.execute(
+        "INSERT INTO game_controls (user_id, action, message, created_by, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (
+            user_id,
+            action,
+            message,
+            current_user()["id"],
+            datetime.datetime.now(datetime.UTC).isoformat(),
+        ),
+    )
+    log_admin_activity(
+        "game_control",
+        "user",
+        user_id,
+        f"{GAME_CONTROL_ACTIONS[action]} queued for {user_label(user)}",
+    )
+    db.commit()
+    flash(f"{GAME_CONTROL_ACTIONS[action]} sent to {user_label(user)}.")
     return redirect(url_for("admin_panel"))
 
 

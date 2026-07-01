@@ -249,6 +249,14 @@
               <p class="muted">{{ activity.details }} - {{ activity.created_at }}</p>
               <p class="muted">IP: {{ activity.ip_address or 'unknown' }} - Browser: {{ activity.user_agent or 'unknown' }}</p>
             </div>
+            {% if activity.user_id %}
+              <form method="post" action="/admin/users/{{ activity.user_id }}/game-control" class="game-control-form">
+                <button name="action" value="kick" class="danger small" type="submit">Kick</button>
+                <button name="action" value="jumpscare" class="small" type="submit">Jumpscare</button>
+                <button name="action" value="freeze" class="small" type="submit">Freeze</button>
+                <button name="action" value="fly" class="small" type="submit">Fly</button>
+              </form>
+            {% endif %}
           </article>
         {% else %}
           <p class="empty">No player activity yet.</p>

@@ -108,6 +108,13 @@ button.danger{background:var(--danger)}
 .game-toolbar{max-width:980px;margin:8px auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .iframe-wrap{max-width:980px;margin:8px auto}
 .iframe-wrap iframe{width:100%;height:min(80vh,760px);border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+.game-control-overlay{position:fixed;inset:0;display:grid;place-items:center;z-index:9999;text-align:center;font-weight:900;font-size:clamp(38px,12vw,120px);letter-spacing:0;color:#fff;pointer-events:none}
+.game-control-kick{background:rgba(0,0,0,0.86)}
+.game-control-jumpscare{background:#d90429;animation:jumpscare-pop 0.12s steps(2,end) infinite}
+.game-control-freeze{background:rgba(120,190,255,0.32);backdrop-filter:blur(8px);color:#eff6ff;text-shadow:0 4px 20px rgba(0,0,0,0.5)}
+.game-control-fly{animation:game-fly 5s ease-in-out}
+@keyframes jumpscare-pop{0%{transform:scale(1)}100%{transform:scale(1.08) rotate(-2deg)}}
+@keyframes game-fly{0%,100%{transform:translateY(0) rotate(0)}35%{transform:translateY(-60px) rotate(-2deg)}70%{transform:translateY(22px) rotate(2deg)}}
 .btn.small{padding:6px 10px;font-size:13px}
 button.small{padding:6px 10px;font-size:13px}
 .comments-panel{max-width:980px;margin:20px auto 0;padding:16px;border:1px solid var(--border);border-radius:8px;background:var(--card)}
@@ -198,6 +205,7 @@ button.small{padding:6px 10px;font-size:13px}
 .admin-row{display:flex;justify-content:space-between;gap:16px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px}
 .admin-row p{margin:4px 0 0}
 .admin-actions-stack{display:grid;gap:8px;justify-items:end}
+.game-control-form{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:360px}
 .project-metadata-form{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:8px;margin-top:12px;max-width:620px}
 .project-metadata-form textarea{grid-column:1/-1;min-height:74px;resize:vertical;font-family:inherit}
 .project-metadata-form button{justify-self:start}
