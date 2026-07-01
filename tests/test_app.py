@@ -1638,6 +1638,24 @@ class SiteAuthAdminTests(unittest.TestCase):
         self.assertIsNotNone(exported_favorite)
         self.assertEqual(exported_avatar["image_url"], "/project_files/1/thumb.png")
 
+    def test_admin_export_repairs_missing_game_controls_table(self):
+        self.login()
+        with site.app.app_context():
+            db = site.get_db()
+            db.execute("DROP TABLE game_controls")
+            db.commit()
+
+        response = self.client.get("/admin/export-website-data")
+
+        self.assertEqual(response.status_code, 200)
+        archive = zipfile.ZipFile(io.BytesIO(response.data))
+        self.assertIn("game_controls.json", archive.namelist())
+        with site.app.app_context():
+            table = site.get_db().execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'game_controls'"
+            ).fetchone()
+        self.assertIsNotNone(table)
+
     def test_admin_can_import_website_data_zip(self):
         self.login()
         with site.app.app_context():

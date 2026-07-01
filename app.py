@@ -2250,6 +2250,7 @@ def write_database_snapshot(zipf):
 @app.route("/admin/export-website-data")
 @admin_required
 def export_website_data():
+    init_db()
     memory_file = io.BytesIO()
     with zipfile.ZipFile(memory_file, "w", zipfile.ZIP_DEFLATED) as archive:
         db = get_db()
